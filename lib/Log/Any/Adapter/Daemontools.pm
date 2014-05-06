@@ -1,5 +1,5 @@
 package Log::Any::Adapter::Daemontools;
-use Moo;
+use Moo 0.009009;
 use warnings NONFATAL => 'all';
 use Try::Tiny;
 use Carp 'croak';
