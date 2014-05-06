@@ -1,6 +1,7 @@
 #! /usr/bin/perl
 
-use common::sense;
+use strict;
+use warnings;
 use Test::More;
 use Log::Any '$log';
 
