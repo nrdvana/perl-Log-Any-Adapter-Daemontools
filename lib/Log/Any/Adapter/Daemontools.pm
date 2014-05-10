@@ -6,7 +6,7 @@ use Carp 'croak';
 require Scalar::Util;
 require Data::Dumper;
 
-our $VERSION= '0.000001';
+our $VERSION= '0.001001';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
