@@ -12,6 +12,11 @@ our $VERSION= '0.001001';
 
 =head1 DESCRIPTION
 
+In the daemontools way of thinking, a daemon writes all its logging output
+to STDERR, which is a pipe to a logger process.  When writing all log info
+to a pipe, you lose the log level information.  An elegantly simple way to
+preserve this information is to prefix each line with "error:" or etc.
+
 This is a small simple module that writes logging messages to STDERR,
 prefixing each line with an identifier like "error: ", "warning: ", etc.
 
@@ -104,7 +109,7 @@ The default filter is 0, meaning 'info' and below are suppressed.
 
 =head2 dumper
 
-  use Log::Any::Adapter 'Daemontools', dumper => sub { ... };
+  use Log::Any::Adapter 'Daemontools', dumper => sub { my $val=shift; ... };
 
 Use a custom dumper function for converting perl data to strings.
 The dumper is only used for the "*f()" formatting functions, and for log
@@ -121,6 +126,17 @@ has dumper => ( is => 'lazy', builder => sub { \&_default_dumper } );
 This logger has a method for all of the standard Log::Any methods (as of the
 time this was written... I did not inherit from the Log::Any::Adapter::Core
 base class)
+
+=head1 new
+
+  $class->new( filter => 'notice', dumper => sub { ... } )
+  
+  use Log::Any::Adapter 'Daemonproxy', filter => 'notice', dumper => sub { ... };
+  
+  Log::Any::Adapter->set('Daemonproxy', filter => 'notice', dumper => sub { ... });
+
+Construct a new instance of the logger, in a variety of ways.  Accepted
+paramters are currently 'filter' and 'dumper'.
 
 =head2 write_msg
 
