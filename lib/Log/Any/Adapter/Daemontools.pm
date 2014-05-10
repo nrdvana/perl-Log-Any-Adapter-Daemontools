@@ -6,7 +6,7 @@ use Carp 'croak';
 require Scalar::Util;
 require Data::Dumper;
 
-our $VERSION= '0.0000';
+our $VERSION= '0.000001';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
@@ -48,27 +48,34 @@ BEGIN {
 		my $level= $prev_level= defined $level_map{$method}? $level_map{$method} : $prev_level;
 		my $impl= ($level >= 0)
 			# Standard logging
-			? sub { $level > (shift)->{filter} and print STDERR "$method: ", @_, "\n"; }
+			? sub {
+				return unless $level > $_[0]{filter};
+				my $self= shift;
+				my $str= join(' ', map { !defined $_? '<undef>' : $_ } @_);
+				$str =~ s/\n/\n$method: /g;
+				print STDERR "$method: $str\n";
+			}
 			# Debug and trace logging
 			: sub {
 				return unless $level > $_[0]{filter};
-				my ($self, @args)= @_;
-				try {
-					print STDERR
-						join(' ', "$method:",
-							map { !defined $_? '<undef>' : !ref $_? $_ : $self->dumper->($_) } @args
-						),
-						"\n";
-				}
-				catch {
-					print STDERR
-						"error: exception while stringifying message for '$method': $_\n";
-				};
+				my $self= shift;
+				my $str= join(' ', map { !defined $_? '<undef>' : !ref $_? $_ : $self->dumper->($_) } @_);
+				$str =~ s/\n/\n$method: /g;
+				print STDERR "$method: $str\n";
+			};
+		my $printfn=
+			sub {
+				return unless $level > $_[0]{filter};
+				my ($self, $format, @args)= @_;
+				my $str= sprintf $format, map { !defined $_? '<undef>' : !ref $_? $_ : $self->dumper->($_) } @args;
+				$str =~ s/\n/\n$method: /g;
+				print STDERR "$method: $str\n";
 			};
 		my $test= sub { $level > (shift)->{filter} };
-		
+
 		no strict 'refs';
 		*{__PACKAGE__ . "::$method"}= $impl;
+		*{__PACKAGE__ . "::${method}f"}= $printfn;
 		*{__PACKAGE__ . "::is_$method"}= $test;
 	}
 
@@ -77,7 +84,8 @@ BEGIN {
 	for (keys %aliases) {
 		next if __PACKAGE__->can($_);
 		no strict 'refs';
-		*{__PACKAGE__ . "::$_"}= *{__PACKAGE__ . "::$aliases{$_}"};
+		*{__PACKAGE__ . "::$_"}=    *{__PACKAGE__ . "::$aliases{$_}"};
+		*{__PACKAGE__ . "::${_}f"}= *{__PACKAGE__ . "::$aliases{$_}f"};
 		*{__PACKAGE__ . "::is_$_"}= *{__PACKAGE__ . "::is_$aliases{$_}"};
 	}
 }
@@ -86,16 +94,23 @@ has filter => ( is => 'rw', default => sub { 0 }, coerce => \&_coerce_filter_lev
 has dumper => ( is => 'rw', default => sub { \&_default_dumper } );
 
 sub _default_dumper {
-	my $x= Data::Dumper->new([$_[0]])->Indent(0)->Terse(1)->Useqq(1)->Quotekeys(0)->Maxdepth(4)->Sortkeys(1)->Dump;
-	substr($x, 1020)= '...' if length $x >= 1024;
-	$x;
+	my $val= shift;
+	try {
+		Data::Dumper->new([$val])->Indent(0)->Terse(1)->Useqq(1)->Quotekeys(0)->Maxdepth(4)->Sortkeys(1)->Dump;
+	} catch {
+		my $x= "$_";
+		$x =~ s/\n//;
+		substr($x, 50)= '...' if length $x >= 50;
+		"<exception $x>";
+	};
 }
 
 sub _coerce_filter_level {
 	my $val= shift;
 	return (!defined $val || $val eq 'none')? $level_map{trace}-1
 		: Scalar::Util::looks_like_number($val)? $val
-		: exists $level_map{$val}? Slevel_map{$val}
+		: exists $level_map{$val}? $level_map{$val}
+		: ($val =~ /^debug-(\d+)$/)? $level_map{debug} - $1
 		: croak "unknown log level '$val'";
 }
 

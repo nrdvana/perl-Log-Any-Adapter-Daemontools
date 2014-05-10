@@ -17,19 +17,15 @@ sub reset_stderr {
 }
 
 reset_stderr;
-$log->warn("test1");
-like( $buf, qr/warning: test1\n/ );
+$log->warnf("%s", "test1");
+like( $buf, qr/^warning: test1\n$/ );
 
 reset_stderr;
-$log->error("test2");
-like( $buf, qr/error: test2\n/ );
+$log->errorf("%d %s", 5, [ 1, 2, 3 ]);
+like( $buf, qr/^error: 5 \[1,2,3\]\n$/ );
 
 reset_stderr;
-$log->debug("test3");
-is( length $buf, 0 );
-
-Log::Any::Adapter->set('Daemontools', filter => undef);
-$log->debug("test4");
-like( $buf, qr/debug: test4\n/ );
+$log->warningf("%s%s", "test3\n", "test4");
+like( $buf, qr/^warning: test3\nwarning: test4\n$/ );
 
 done_testing;
