@@ -1,0 +1,7 @@
+Version 0.1
+ - Basic support for all logging methods, prefixing all output with
+   the canonical name of the log level.
+ - Default filter is info and below.
+ - Support for custom dumpers, used for non-scalars passed to 'debug'
+   or 'trace' or any of the formatting '*f()' functions.
+ - Embedded newlines converted to properly prefixed log lines.
