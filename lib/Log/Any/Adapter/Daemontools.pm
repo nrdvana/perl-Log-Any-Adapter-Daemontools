@@ -94,18 +94,44 @@ BEGIN {
 
   use Log::Any::Adapter 'Daemontools', filter => 0;
   use Log::Any::Adapter 'Daemontools', filter => 'info';
-  use Log::Any::Adapter "Daemontools', filter => 'debug';
-  use Log::Any::Adapter "Daemontools', filter => "debug-$ENV{DEBUG}";
+  use Log::Any::Adapter 'Daemontools', filter => 'debug';
+  use Log::Any::Adapter 'Daemontools', filter => "debug-$ENV{DEBUG}";
 
 Messages equal to or less than the level of filter are suppressed.
 
-filter may be an integer (0 is info, 1 is notice, -1 is debug, etc) or a level
-name like 'info', 'debug', etc, or a level alias, the string 'none' or undef
-which do not suppress anything, or a special notation of /debug-(\d+)/, where
-a number will be subtracted from the debug level (this is useful for quickly
-setting a log level from $ENV{DEBUG})
-
 The default filter is 0, meaning 'info' and below are suppressed.
+
+filter may be:
+
+=over 5
+
+=item *
+
+an integer (1 is notice, 0 is info, -1 is debug, etc)
+
+=item *
+
+a level name like 'info', 'debug', etc, or a level alias as documented
+in Log::Any.
+
+=item *
+
+undef, or the string 'none', which do not suppress anything
+
+=item *
+
+a special notation matching /debug-(\d+)/, where a number will be
+subtracted from the debug level
+
+This is useful for quickly setting a log level from $ENV{DEBUG} using
+the following code:
+
+  use Log::Any::Adapter 'Daemontools', filter => "debug-".($ENV{DEBUG}||0);
+  
+so that DEBUG=1 causes debug to be shown, but not trace, and DEBUG=2
+causes both debug and trace to show.
+
+=back
 
 =head2 dumper
 
@@ -123,11 +149,14 @@ has dumper => ( is => 'lazy', builder => sub { \&_default_dumper } );
 
 =head1 METHODS
 
-This logger has a method for all of the standard Log::Any methods (as of the
-time this was written... I did not inherit from the Log::Any::Adapter::Core
-base class)
+This logger has a method for all of the standard logging methods as of Log::Any
+version 0.15
 
-=head1 new
+I decided to base my class on Moo rather than Log::Any::Adapter::Core, so it is
+possible this module will need updated in the future, though Log::Any's API should
+be pretty stable.
+
+=head2 new
 
   $class->new( filter => 'notice', dumper => sub { ... } )
   
@@ -148,7 +177,7 @@ differently, or write to a file handle other than STDERR.
 
 =head2 _default_dumper
 
-  _default_dumper( $value )
+  $string = _default_dumper( $perl_data );
 
 This is a function which dumps a value in a human readable format.  Currently
 it uses Data::Dumper with a max depth of 4, but might change in the future.
