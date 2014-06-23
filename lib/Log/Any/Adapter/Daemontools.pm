@@ -26,7 +26,7 @@ using Data::Dumper or similar.  This allows debug messages to dump objects
 without worry that the stringification would cause a fatal exception.
 
 All other log levels are considered "important" such that you want the
-exception if they fail, and arguments are converted to strings howver
+exception if they fail, and arguments are converted to strings however
 they normally would if you tried printing them, on the assumption that
 if you print an object in the course of normal logging then you probably
 want the natural stringification for that type of object.
@@ -160,9 +160,9 @@ be pretty stable.
 
   $class->new( filter => 'notice', dumper => sub { ... } )
   
-  use Log::Any::Adapter 'Daemonproxy', filter => 'notice', dumper => sub { ... };
+  use Log::Any::Adapter 'Daemontools', filter => 'notice', dumper => sub { ... };
   
-  Log::Any::Adapter->set('Daemonproxy', filter => 'notice', dumper => sub { ... });
+  Log::Any::Adapter->set('Daemontools', filter => 'notice', dumper => sub { ... });
 
 Construct a new instance of the logger, in a variety of ways.  Accepted
 paramters are currently 'filter' and 'dumper'.
@@ -212,5 +212,75 @@ sub _coerce_filter_level {
 		: ($val =~ /^debug-(\d+)$/)? $level_map{debug} - $1
 		: croak "unknown log level '$val'";
 }
+
+=head1 SEE ALSO
+
+=head2 Process Supervision Tools
+
+=over 15
+
+=item Daemontools
+
+The pioneer of the design:
+
+L<http://cr.yp.to/daemontools.html>
+
+=item Runit
+
+A popular re-implementation of the same idea:
+
+L<http://smarden.org/runit>
+
+Also available as a busybox applet:
+
+L<http://busybox.org>
+
+=item Perp
+
+A variation that uses a single process to supervise many jobs:
+
+L<http://b0llix.net/perp/>
+
+=item s6
+
+Extreme minimalist supervisor with high level of attention to detail.
+
+L<http://skarnet.org/software/s6/>
+
+Also see discussion and comparison of tools at L<http://skarnet.org/software/s6/why.html>
+
+=item Daemonproxy
+
+Scriptable supervision tool that lets you easily build your own supervisor.
+
+L<http://www.nrdvana.net/daemonproxy/>
+
+=back
+
+=head2 Useful Loggers
+
+=over 15
+
+=item Tinylog
+
+Basic log-to-file with rotation built-in.
+
+L<http://b0llix.net/perp/site.cgi?page=tinylog.8>
+
+=item Sissylog
+
+Log to syslog, using prefixes to determine log level
+
+L<http://b0llix.net/perp/site.cgi?page=sissylog.8>
+
+=item s6-log
+
+Filter log messages into files by pattern, with many useful features.
+
+L<http://skarnet.org/software/s6/s6-log.html>
+
+=back
+
+=cut
 
 1;
