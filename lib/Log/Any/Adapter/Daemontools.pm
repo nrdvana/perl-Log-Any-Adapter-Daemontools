@@ -47,7 +47,7 @@ BEGIN {
 	);
 
 	my $prev_level= 0;
-	# We implement the stock methods, and also 'fatal' so that the
+	# We implement the stock methods, but also 'fatal' so that the
 	# message written to the log starts with the proper level name.
 	foreach my $method ( Log::Any->logging_methods(), 'fatal' ) {
 		my $level= $prev_level= defined $level_map{$method}? $level_map{$method} : $prev_level;
@@ -55,13 +55,13 @@ BEGIN {
 			# Standard logging
 			? sub {
 				return unless $level > $_[0]{filter};
-				(shift)->write_msg($method, join(' ', map { !defined $_? '<undef>' : $_ } @_));
+				(shift)->write_msg($method, join('', map { !defined $_? '<undef>' : $_ } @_));
 			}
 			# Debug and trace logging
 			: sub {
 				return unless $level > $_[0]{filter};
 				my $self= shift;
-				eval { $self->write_msg($method, join(' ', map { !defined $_? '<undef>' : !ref $_? $_ : $self->dumper->($_) } @_)); };
+				eval { $self->write_msg($method, join('', map { !defined $_? '<undef>' : !ref $_? $_ : $self->dumper->($_) } @_)); };
 			};
 		my $printfn=
 			sub {
@@ -188,8 +188,9 @@ This is the default value for the 'dumper' attribute.
 
 sub write_msg {
 	my ($self, $level_name, $str)= @_;
-	$str =~ s/\n/\n$level_name: /g;
-	print STDERR "$level_name: $str\n";
+	chomp $str;
+	$str =~ s/^/$level_name: /mg unless $level_name eq 'info';
+	print STDERR $str, "\n";
 }
 
 sub _default_dumper {
