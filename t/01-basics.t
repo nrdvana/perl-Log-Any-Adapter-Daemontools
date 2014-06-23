@@ -10,21 +10,21 @@ use_ok( 'Log::Any::Adapter', 'Daemontools' ) || BAIL_OUT;
 
 my $buf;
 
-sub reset_stderr {
-	close STDERR;
+sub reset_stdout {
+	close STDOUT;
 	$buf= '';
-	open STDERR, '>', \$buf or die "Can't redirect STDERR to a memory buffer: $!";
+	open STDOUT, '>', \$buf or die "Can't redirect stdout to a memory buffer: $!";
 }
 
-reset_stderr;
+reset_stdout;
 $log->warn("test1");
 like( $buf, qr/warning: test1\n/ );
 
-reset_stderr;
+reset_stdout;
 $log->error("test2");
 like( $buf, qr/error: test2\n/ );
 
-reset_stderr;
+reset_stdout;
 $log->debug("test3");
 is( length $buf, 0 );
 

@@ -13,11 +13,11 @@ our $VERSION= '0.001001';
 =head1 DESCRIPTION
 
 In the daemontools way of thinking, a daemon writes all its logging output
-to STDERR, which is a pipe to a logger process.  When writing all log info
+to STDOUT, which is a pipe to a logger process.  When writing all log info
 to a pipe, you lose the log level information.  An elegantly simple way to
 preserve this information is to prefix each line with "error:" or etc.
 
-This is a small simple module that writes logging messages to STDERR,
+This is a small simple module that writes logging messages to STDOUT,
 prefixing each line with an identifier like "error: ", "warning: ", etc.
 
 For the Debug and Trace log levels, it additionally wraps the message
@@ -173,7 +173,7 @@ paramters are currently 'filter' and 'dumper'.
 
 This is an internal method which all the other logging methods call.  You can
 override it if you want to create a derived logger that handles line wrapping
-differently, or write to a file handle other than STDERR.
+differently, or write to a file handle other than STDOUT.
 
 =head2 _default_dumper
 
@@ -190,7 +190,7 @@ sub write_msg {
 	my ($self, $level_name, $str)= @_;
 	chomp $str;
 	$str =~ s/^/$level_name: /mg unless $level_name eq 'info';
-	print STDERR $str, "\n";
+	print STDOUT $str, "\n";
 }
 
 sub _default_dumper {
