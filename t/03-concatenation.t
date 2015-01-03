@@ -18,6 +18,9 @@ sub reset_stdout {
 
 reset_stdout;
 $log->notice("foo","bar");
-like( $buf, qr/notice: foobar\n/ );
+
+# Log::Any 1.00 or later will auto-concatenate with space; older log-any
+# will not and this adapter will do so without spaces
+like( $buf, qr/notice: foo ?bar\n/ );
 
 done_testing;
