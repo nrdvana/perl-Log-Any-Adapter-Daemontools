@@ -6,7 +6,7 @@ use Test::More;
 use Log::Any '$log';
 $SIG{__DIE__}= $SIG{__WARN__}= sub { diag @_; };
 
-use_ok( 'Log::Any::Adapter', 'Daemontools', filter => -1 ) || BAIL_OUT;
+use_ok( 'Log::Any::Adapter', 'Daemontools', filter => 'none' ) || BAIL_OUT;
 
 my $buf;
 

@@ -16,7 +16,16 @@ sub reset_stdout {
 	open STDOUT, '>', \$buf or die "Can't redirect stdout to a memory buffer: $!";
 }
 
+sub show_hier {
+	no strict 'refs';
+	my $class= shift;
+	print "$class";
+}
+
 reset_stdout;
+
+use DDP;
+p $log;
 $log->warn("test1");
 like( $buf, qr/warning: test1\n/ );
 
@@ -28,7 +37,7 @@ reset_stdout;
 $log->debug("test3");
 is( length $buf, 0 );
 
-Log::Any::Adapter->set('Daemontools', filter => undef);
+Log::Any::Adapter->set('Daemontools', filter => 'none');
 $log->debug("test4");
 like( $buf, qr/debug: test4\n/ );
 

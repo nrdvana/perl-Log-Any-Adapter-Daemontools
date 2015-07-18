@@ -1,3 +1,22 @@
+Version 0.3
+ - This module now inherits from Log::Any::Adapter::Filtered, which gives
+   it most of its former functionality, and quite a few new features.
+   It is now a proper subclass of Log::Any::Adapteer::Base, as required
+   by the Log::Any::Adapter spec, and is no longer Moo-based.
+   This means less flexibility for extending, but fewer deps.
+ - filter => undef in the constructor has changed meaning.  It now means
+   to use the default filter level.  To filter nothing, use filter => 'none'.
+ - filter => $number is no longer supported.  The numbers shouldn't be part
+   of the public API.  Use "$level[-+]$offset" instead, like "debug+1".
+   This is because the internal log level numbers now come from the module
+   Log::Any::Adapter::Filtered.
+ - default_dumper now comes from the Log::Any::Adapter::Filtered package,
+   and now limits the dumped variable to depth 4 if it is a plain ref, or
+   depth 2 if it is blessed.  The entire dump is limited to 2000 characters.
+   You can still override the dump function however you like.
+ - You can now use Log::...::Filtered's API for setting default log levels
+   per-category, rather than having to specify lots of adapter bindings.
+
 Version 0.2
  - This module no longer prefixes info() messages with "info:", so that
    info messages are equivalent to printing the text.

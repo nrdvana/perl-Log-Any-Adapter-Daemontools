@@ -1,12 +1,12 @@
 package Log::Any::Adapter::Daemontools;
-use Moo 0.009009;
-use warnings NONFATAL => 'all';
-use Try::Tiny;
+use strict;
+use warnings;
+use parent 'Log::Any::Adapter::Filtered';
 use Carp 'croak';
 require Scalar::Util;
 require Data::Dumper;
 
-our $VERSION= '0.002000';
+our $VERSION= '0.003000';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
@@ -30,63 +30,6 @@ exception if they fail, and arguments are converted to strings however
 they normally would if you tried printing them, on the assumption that
 if you print an object in the course of normal logging then you probably
 want the natural stringification for that type of object.
-
-=cut
-
-our %level_map;
-BEGIN {
-	%level_map= (
-		trace    => -2,
-		debug    => -1,
-		info     =>  0,
-		notice   =>  1,
-		warning  =>  2,
-		error    =>  3,
-		critical =>  4,
-		fatal    =>  4,
-	);
-
-	my $prev_level= 0;
-	# We implement the stock methods, but also 'fatal' so that the
-	# message written to the log starts with the proper level name.
-	foreach my $method ( Log::Any->logging_methods(), 'fatal' ) {
-		my $level= $prev_level= defined $level_map{$method}? $level_map{$method} : $prev_level;
-		my $impl= ($level >= 0)
-			# Standard logging
-			? sub {
-				return unless $level > $_[0]{filter};
-				(shift)->write_msg($method, join('', map { !defined $_? '<undef>' : $_ } @_));
-			}
-			# Debug and trace logging
-			: sub {
-				return unless $level > $_[0]{filter};
-				my $self= shift;
-				eval { $self->write_msg($method, join('', map { !defined $_? '<undef>' : !ref $_? $_ : $self->dumper->($_) } @_)); };
-			};
-		my $printfn=
-			sub {
-				return unless $level > $_[0]{filter};
-				my $self= shift;
-				$self->write_msg($method, sprintf((shift), map { !defined $_? '<undef>' : !ref $_? $_ : $self->dumper->($_) } @_));
-			};
-		my $test= sub { $level > (shift)->{filter} };
-
-		no strict 'refs';
-		*{__PACKAGE__ . "::$method"}= $impl;
-		*{__PACKAGE__ . "::${method}f"}= $printfn;
-		*{__PACKAGE__ . "::is_$method"}= $test;
-	}
-
-	# Now create any alias that isn't handled
-	my %aliases= Log::Any->log_level_aliases;
-	for (keys %aliases) {
-		next if __PACKAGE__->can($_);
-		no strict 'refs';
-		*{__PACKAGE__ . "::$_"}=    *{__PACKAGE__ . "::$aliases{$_}"};
-		*{__PACKAGE__ . "::${_}f"}= *{__PACKAGE__ . "::$aliases{$_}f"};
-		*{__PACKAGE__ . "::is_$_"}= *{__PACKAGE__ . "::is_$aliases{$_}"};
-	}
-}
 
 =head1 ATTRIBUTES
 
@@ -142,24 +85,16 @@ The dumper is only used for the "*f()" formatting functions, and for log
 levels 'debug' and 'trace'.  All normal logging will stringify the object
 in the normal way.
 
-=cut
+=head2 category
 
-has filter => ( is => 'rw', default => sub { 0 }, coerce => \&_coerce_filter_level );
-has dumper => ( is => 'lazy', builder => sub { \&_default_dumper } );
+Returns the name of the category of this logging object.
 
 =head1 METHODS
 
-This logger has a method for all of the standard logging methods as of Log::Any
-version 0.15
-
-I decided to base my class on Moo rather than Log::Any::Adapter::Core, so it is
-possible this module will need updated in the future, though Log::Any's API should
-be pretty stable.
+This logger has a method for all of the standard logging methods.
 
 =head2 new
 
-  $class->new( filter => 'notice', dumper => sub { ... } )
-  
   use Log::Any::Adapter 'Daemontools', filter => 'notice', dumper => sub { ... };
   
   Log::Any::Adapter->set('Daemontools', filter => 'notice', dumper => sub { ... });
@@ -175,15 +110,6 @@ This is an internal method which all the other logging methods call.  You can
 override it if you want to create a derived logger that handles line wrapping
 differently, or write to a file handle other than STDOUT.
 
-=head2 _default_dumper
-
-  $string = _default_dumper( $perl_data );
-
-This is a function which dumps a value in a human readable format.  Currently
-it uses Data::Dumper with a max depth of 4, but might change in the future.
-
-This is the default value for the 'dumper' attribute.
-
 =cut
 
 sub write_msg {
@@ -193,26 +119,22 @@ sub write_msg {
 	print STDOUT $str, "\n";
 }
 
-sub _default_dumper {
-	my $val= shift;
-	try {
-		Data::Dumper->new([$val])->Indent(0)->Terse(1)->Useqq(1)->Quotekeys(0)->Maxdepth(4)->Sortkeys(1)->Dump;
-	} catch {
-		my $x= "$_";
-		$x =~ s/\n//;
-		substr($x, 50)= '...' if length $x >= 50;
-		"<exception $x>";
-	};
-}
+=head1 LOGGING METHODS
 
-sub _coerce_filter_level {
-	my $val= shift;
-	return (!defined $val || $val eq 'none')? $level_map{trace}-1
-		: Scalar::Util::looks_like_number($val)? $val
-		: exists $level_map{$val}? $level_map{$val}
-		: ($val =~ /^debug-(\d+)$/)? $level_map{debug} - $1
-		: croak "unknown log level '$val'";
-}
+This module has all the standard logging methods from L<Log::Any/LOG LEVELS>.
+
+For regular logging functions (i.e. C<warn>, C<info>) the arguments are
+stringified and concatenated.  Errors during stringify or printing are not
+caught.
+
+For printf-like logging functions (i.e. C<warnf>, C<infof>) reference
+arguments are passed to C<$self-E<gt>dumper> before passing them to
+sprintf.  Errors are not caught here either.
+
+For any log level below C<info>, errors ARE caught with an C<eval> and printed
+as a warning.
+This is to prevent sloppy debugging code from ever crashing a production system.
+Also, references are passed to C<$self-E<gt>dumper> even for the regular methods.
 
 =head1 SEE ALSO
 
