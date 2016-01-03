@@ -8,7 +8,7 @@ use Try::Tiny;
 use Carp 'croak', 'carp';
 require Scalar::Util;
 
-our $VERSION= '0.100000';
+our $VERSION= '0.0900000_001';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
