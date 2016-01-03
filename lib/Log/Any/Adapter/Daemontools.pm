@@ -8,7 +8,7 @@ use Try::Tiny;
 use Carp 'croak', 'carp';
 require Scalar::Util;
 
-our $VERSION= '0.0900000_001';
+our $VERSION= '0.0900000_002';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
@@ -706,7 +706,7 @@ sub _build_squelch_subclasses {
 	# Create subclasses and install methods
 	for my $pkg (keys %subclass) {
 		no strict 'refs';
-		push @{$pkg.'::ISA'}, $class unless defined @{$pkg.'::ISA'} && @{$pkg.'::ISA'};
+		@{$pkg.'::ISA'}= ( $class );
 		for my $method (keys %{ $subclass{$pkg} }) {
 			*{$pkg.'::'.$method}= $subclass{$pkg}{$method};
 		}
@@ -717,6 +717,7 @@ sub _build_squelch_subclasses {
 # The set of adapters which have been "squelch-cached"
 # (i.e. blessed into a subclass)
 our %_squelch_cached_adapters;
+
 BEGIN {
 	foreach my $method ( Log::Any->logging_methods(), 'fatal' ) {
 		# TODO: Make prefix and output handle customizable
