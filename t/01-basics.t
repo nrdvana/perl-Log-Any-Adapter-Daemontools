@@ -18,18 +18,30 @@ sub reset_stdout {
 
 reset_stdout;
 $log->warn("test1");
-like( $buf, qr/warning: test1\n/ );
+like( $buf, qr/warning: test1\n/, 'warn becomes warning' );
 
 reset_stdout;
-$log->error("test2");
-like( $buf, qr/error: test2\n/ );
+$log->err("test2");
+like( $buf, qr/error: test2\n/, 'err becomes error' );
 
 reset_stdout;
-$log->debug("test3");
-is( length $buf, 0 );
+$log->info("test3");
+like( $buf, qr/test3\n/, 'no prefix on "info"' );
 
-Log::Any::Adapter->set('Daemontools', filter => undef);
+reset_stdout;
 $log->debug("test4");
-like( $buf, qr/debug: test4\n/ );
+is( length $buf, 0, 'debug suppressed by default' );
+
+Log::Any::Adapter::Daemontools->global_log_level('debug');
+$log->debug("test5");
+like( $buf, qr/debug: test5\n/, 'debug un-suppressed' );
+
+reset_stdout;
+$log->warning("test6\ntest7");
+like( $buf, qr/^warning: test6\nwarning: test7\n$/, 'prefix on each line' );
+
+reset_stdout;
+$log->warning("test8\n");
+like( $buf, qr/^warning: test8\n$/, 'newline not duplicated' );
 
 done_testing;

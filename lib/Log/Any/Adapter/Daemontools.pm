@@ -3,12 +3,12 @@ use strict;
 use warnings;
 use parent 'Log::Any::Adapter::Base';
 use Log::Any::Adapter::Util 'numeric_level';
-use Log::Any ();
+use Log::Any 1.03;
 use Try::Tiny;
 use Carp 'croak', 'carp';
 require Scalar::Util;
 
-our $VERSION= '0.003000';
+our $VERSION= '0.100000';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
@@ -27,14 +27,15 @@ simple way to preserve this information is to prefix each line with
 Another frequent desire is to request that a long-lived daemon change its
 logging level on the fly.  One way this is handled is by sending SIGUSR1/SIGUSR2
 to tell the daemon to raise/lower the logging level.  Likewise people often
-want to use "-v" or "-q" command line options to the same effect.
+want to use "-v" or "-q" command line options to the same effect when running
+it from the command line.
 
 This module provides a convenient way for you to configure all of that from
 a single "use" line.
 
 =head1 VERSION NOTICE
 
-NOTE: Version 0.003 lost some of the features of version 0.002 when the
+NOTE: Version 0.1 lost some of the features of version 0.002 when the
 internals of Log::Any changed in a way that made them impossible.
 I don't know if anyone was using them anyway, but pay close attention
 if you are upgrading.  This new version adheres more closely to the
@@ -44,14 +45,20 @@ specification for a logging adapter.
 
   # No "bonus features" are enabled by default, but this gets you the most
   # common Unixy behavior.
-  use Log::Any::Adapter 'Daemontools', argv => 1, env => 1, handle_signals => ['USR1','USR2'];
+  use Log::Any::Adapter 'Daemontools',
+    config => { argv => 1, env => 1, handle_signals => ['USR1','USR2'] };
   
   # Above is equivalent to:
   use Log::Any::Adapter 'Daemontools',
-    log_level  => 'info',
-	argv => { verbose => [ '-v', '--verbose' ], quiet => [ '-q', '--quiet' ], bundle => 1, stop => '--' },
-	env  => { debug => 'DEBUG' },
-	handle_signals => { verbose => 'USR1', quiet => 'USR2' };
+    config => {
+      log_level  => 'info',
+      argv => {
+        verbose => [ '-v', '--verbose' ], quiet => [ '-q', '--quiet' ],
+        bundle => 1, stop => '--'
+      },
+      env  => { debug => 'DEBUG' },
+      handle_signals => { verbose => 'USR1', quiet => 'USR2' }
+    };
   
   # Above is equivalent to:
   use Log::Any::Adapter::Daemontools 'global_log_level', 'global_debug_level', 'parse_log_level_opts';
@@ -59,17 +66,17 @@ specification for a logging adapter.
   if ($ENV{DEBUG}) { global_debug_level($ENV{DEBUG}); }
   if (@ARGV) {
     global_log_level(
-      parse_log_level_opts({
+      parse_log_level_opts(
         array => \@ARGV,
         verbose => [ '-v', '--verbose' ],
         quiet => [ '-q', '--quiet' ],
         bundle => 1,
         stop => '--'
-	  })
+      )
     );
   }
-  $SIG{USR1}= sub { global_log_level('+1'); };
-  $SIG{USR2}= sub { global_log_level('-1'); };
+  $SIG{USR1}= sub { global_log_level('+= 1'); };
+  $SIG{USR2}= sub { global_log_level('-= 1'); };
   Log::Any::Adapter->set('Daemontools');
   
   # Example of a differing point of view:
@@ -79,7 +86,7 @@ specification for a logging adapter.
   #  Log::Any::Adapter::Daemontools instance.)
   #
   use Log::Any::Adapter 'Daemontools',
-	argv => {
+    argv => {
       bundle  => 1,
       verbose => '-v',  # none of that silly long-option stuff for us!
       quiet   => '-q',
@@ -94,13 +101,14 @@ specification for a logging adapter.
 
 =cut
 
-our $global_log_level;       # default for level-filtering
 our $show_category;          # whether to show logging category on each message
 our $show_file_line;         # Whether to show caller for each message
 our $show_file_fullname;     # whether to use full path for caller info
+our $output_handle;
 our ($global_log_level, $global_log_level_min, $global_log_level_max);
-our (%category_level, %category_min, %category_max);
+our (%category_log_level, %category_log_level_min, %category_log_level_max);
 BEGIN {
+	$output_handle= \*STDOUT;
 	$global_log_level= 6;      # info
 	$global_log_level_min= -1; # full squelch
 	$global_log_level_max= 8;  # trace
@@ -117,14 +125,43 @@ BEGIN {
 	};
 }
 
+# init() gets called many times, but we should only perform startup actions once.
+# This global keeps track of whether we have processed a configuration yet.
+our $processed_config;
+
 =head1 ATTRIBUTES
 
-=head2 env
+=cut
+
+sub init {
+	my $self= shift;
+
+	if (!$processed_config && $self->{config}) {
+		$self->process_config(delete $self->{config});
+		$processed_config++;
+	}
+
+	# Initial class is 'Lazy', to calculate things on first use.
+	bless $self, $self->_squelch_base_class . '::Lazy'
+}
+
+=head2 config
+
+This package can only be configured once.  If 'config' is passed as an argument
+to the adapter constuctor it will only be processed when the first adapter is
+created.  The purpose is to allow you to say
+
+  use Log::Any::Adapter 'Daemontools', config => { initial_options... };
+
+and not have to call a bunch of package methods.
+
+=over
+
+=item env
 
   env => $name_or_args
 
-Convenient passthrough to L<process_env>, called only once the first time
-an adaptor is created.
+Convenient passthrough to L<process_env> package method.
 
 If env is a hashref, it is passed directly.  If it is a scalar, it is
 interpreted as a pre-defined "profile" of arguments.
@@ -139,12 +176,11 @@ Profiles:
 
 =back
 
-=head2 argv
+=item argv
 
   argv => $name_or_args
 
-Convenient passthrough to L<process_argv>, called only once the first time
-an adapter is created.
+Convenient passthrough to L<process_argv> package method.
 
 If argv is a hashref, it is passed directly.  If it is a scalar, it is
 interpreted as a pre-defined "profile" of arguments.
@@ -164,59 +200,109 @@ Profiles:
 
 =back
 
-=head2 handle_signals
+=item signals
 
-  handle_signals => [ $v, $q ],
-  handle_signals => { verbose => $v, quiet => $q },
+  signals => [ $v, $q ],
+  signals => { verbose => $v, quiet => $q },
 
-Convenient passthrough to L<handle_signals>, called only once the first time
-an adaptor is created.
+Convenient passthrough to L<handle_signals> package method.
 
-If halde_signals is an arrayref of length 2, they are used as the verbose and
+If handle_signals is an arrayref of length 2, they are used as the verbose and
 quiet parameters, respectively.  If it is a hashref, it is passed directly.
+No other type of value is supported, currently.
+
+=item level
+
+  global_log_level => $name
+  global_log_level => $number
+
+Sets the initial value of the global log level, which can be altered later and
+apply to all adapters that don't have log_level overridden.  See L<global_log_level>
+
+=item level_min
+
+Initial value for L<global_log_level_min>
+
+=item level_max
+
+Initial value for L<global_log_level_max>
+
+=item category_level
+
+Hashref of category names to the initial log level for each.  Note that
+categories with a specified log level will no longer be controlled by changing
+the global log level.
+
+See L<category_log_level> package method.
+
+=item category_min
+
+Sets the L<category_log_level_min> initial value.  This could be used to
+prevent important logging streams from getting silenced even on the most
+extreme 'quiet' level.
+
+=item category_max
+
+Sets the L<category_log_level_max> initial value.  This could be used to
+prevent certain modules form getting too noisy at a level of 'trace'.
+
+=back
 
 =cut
 
-# init() gets called many times, but we should only perform startup actions once.
-# These globals keep track of whether we have done the thing yet.
-our ($process_argv_complete, $process_env_complete, $handle_signals_complete);
+sub process_config {
+	my ($self, $cfg)= @_;
 
-sub init {
-	my $self= shift;
-	
-	# Optional one-time ENV filtering
-	if (!$process_env_complete && $self->{env}) {
+	if ($cfg->{env}) {
 		$self->process_env(
-			((ref $self->{env})||'') eq 'HASH'? $self->{env}
-			: $env_profile{$self->{env}}
-				|| croak "Unknown \"env\" value $self->{env}"
+			((ref $cfg->{env})||'') eq 'HASH'? $cfg->{env}
+			: $env_profile{$cfg->{env}}
+				|| croak "Unknown \"env\" value $cfg->{env}"
 		);
-		$proces_env_complete= 1;
 	}
 	
 	# Optional one-time ARGV filtering
-	if (!$parse_argv_complete && $self->{argv}) {
+	if ($cfg->{argv}) {
 		$self->process_argv(
-			((ref $self->{argv})||'') eq 'HASH'? $self->{argv}
-			: $argv_profile{$self->{argv}}
-				|| croak "Unknown \"argv\" value $self->{agv}"
+			((ref $cfg->{argv})||'') eq 'HASH'? $cfg->{argv}
+			: $argv_profile{$cfg->{argv}}
+				|| croak "Unknown \"argv\" value $cfg->{agv}"
 		);
-		$process_argv_complete= 1;
 	}
 	
 	# Optional one-time installation of signal handlers
-	if (!$handle_signals_complete && $self->{handle_signals}) {
-		my $reft= ref $self->{handle_signals} || '';
+	if ($cfg->{signals}) {
+		my $r= ref($cfg->{signals}) || '';
 		$self->handle_signals(
-			$reft eq 'HASH'? $self->{handle_signals}
-			: $reft eq 'ARRAY'? { verbose => $self->{handle_signals}[0], quiet => $self->{handle_signals}[1] }
-			: croak "Unknown \"handle_signals\" value $self->{handle_signals}"
+			$r eq 'HASH'? $cfg->{signals}
+			: $r eq 'ARRAY'? { verbose => $cfg->{signals}[0], quiet => $cfg->{signals}[1] }
+			: croak "Unknown \"handle_signals\" value $cfg->{signals}"
 		);
-		$handle_signals_complete= 1;
+	}
+	
+	$self->global_log_level($cfg->{level})
+		if defined $cfg->{level};
+	$self->global_log_level_min($cfg->{level_min})
+		if defined $cfg->{level_min};
+	$self->global_log_level_max($cfg->{level_max})
+		if defined $cfg->{level_max};
+	
+	if ($cfg->{category_level}) {
+		for (keys %{ $cfg->{category_level} }) {
+			$self->category_log_level($_ => $cfg->{category_level}{$_});
+		}
+	}
+	if ($cfg->{category_min}) {
+		for (keys %{ $cfg->{category_min} }) {
+			$self->category_log_level_min($_ => $cfg->{category_min}{$_});
+		}
+	}
+	if ($cfg->{category_max}) {
+		for (keys %{ $cfg->{category_max} }) {
+			$self->category_log_level_max($_ => $cfg->{category_max}{$_});
+		}
 	}
 }
-
-=head1 ATTRIBUTES
 
 =head1 PACKAGE METHODS
 
@@ -250,15 +336,21 @@ my %_process_env_args= ( debug => 1, log_level => 1 );
 sub process_env {
 	my ($class, %spec)= @_;
 	# Warn on unknown arguments
-	my @unknown= grep { !$_process_env_args{$_} } keys %$spec;
+	my @unknown= grep { !$_process_env_args{$_} } keys %spec;
 	carp "Invalid arguments: ".join(', ', @unknown) if @unknown;
 	
 	if (defined $spec{debug} && defined $ENV{$spec{debug}}) {
-		global_debug_level($ENV{$spec{debug}});
+		$class->global_log_level( $class->debug_level_to_log_level($ENV{$spec{debug}}) );
 	}
 	if (defined $spec{log_level} && defined $ENV{$spec{log_level}}) {
-		global_log_level($ENV{$spec{log_level}});
+		$class->global_log_level($ENV{$spec{log_level}});
 	}
+}
+
+sub debug_level_to_log_level {
+	my ($class, $level)= @_;
+	$level+= 6 if $level =~ /^-?\d+$/;
+	$level;
 }
 
 =head2 process_argv
@@ -274,8 +366,9 @@ my %_process_argv_args= ( bundle => 1, verbose => 1, quiet => 1, stop => 1, arra
 sub process_argv {
 	my $class= shift;
 	my $ofs= $class->parse_log_level_opts(array => \@ARGV, @_);
-	$class->global_log_level($ofs >= 0 ? "+$ofs" : $ofs)
+	$class->global_log_level("+= $ofs")
 		if $ofs;
+	1;
 }
 
 =head2 parse_log_level_opts
@@ -290,9 +383,9 @@ sub process_argv {
   );
 
 Scans the elements of 'array' looking for patterns listed in 'verbose', 'quiet', or 'stop'.
-Each match of a pattern in 'quiet' adds one to the return value, and each match
-of a pattern in 'verbose' subtracts one.  Stops iterating the array if any pattern
-in 'stop' matches.
+Each match of a pattern in 'quiet' subtracts one from the return value, and
+each match of a pattern in 'verbose' adds one.  Stops iterating the array if
+any pattern in 'stop' matches.
 
 If 'bundle' is true, then this routine will also split apart "bundled options",
 so for example
@@ -336,13 +429,13 @@ sub _combine_regex {
 sub parse_log_level_opts {
 	my ($class, %spec)= @_;
 	# Warn on unknown arguments
-	my @unknown= grep { !$_process_argv_args{$_} } keys %$spec;
+	my @unknown= grep { !$_process_argv_args{$_} } keys %spec;
 	carp "Invalid arguments: ".join(', ', @unknown) if @unknown;
 	
-	defined $spec->{array} or croak "Parameter 'array' is required";
-	my $stop=    _combine_regex( $spec->{stop} );
-	my $verbose= _combine_regex( $spec->{verbose} );
-	my $quiet=   _combine_regex( $spec->{quiet} );
+	defined $spec{array} or croak "Parameter 'array' is required";
+	my $stop=    _combine_regex( $spec{stop} );
+	my $verbose= _combine_regex( $spec{verbose} );
+	my $quiet=   _combine_regex( $spec{quiet} );
 	my $level_ofs= 0;
 	
 	my $parse;
@@ -350,14 +443,14 @@ sub parse_log_level_opts {
 		my $array= $_[0];
 		for (my $i= 0; $i < @$array; $i++) {
 			last if $array->[$i] =~ $stop;
-			if ($array->[$i] =~ /^-[^-=]+$/ and $spec->{bundle}) {
+			if ($array->[$i] =~ /^-[^-=][^-=]+$/ and $spec{bundle}) {
 				# Un-bundle the arguments
 				my @un_bundled= map { "-$_" } split //, substr($array->[$i], 1);
 				my $len= @un_bundled;
 				# Then filter them as usual
 				$parse->(\@un_bundled);
 				# Then re-bundle them, if altered
-				if ($spec->{remove} && $len != @un_bundled) {
+				if ($spec{remove} && $len != @un_bundled) {
 					if (@un_bundled) {
 						$array->[$i]= '-' . join('', map { substr($_,1) } @un_bundled);
 					} else {
@@ -366,17 +459,17 @@ sub parse_log_level_opts {
 				}
 			}
 			elsif ($array->[$i] =~ $verbose) {
-				$level_ofs--;
-				splice( @$array, $i--, 1 ) if $spec->{remove};
+				$level_ofs++;
+				splice( @$array, $i--, 1 ) if $spec{remove};
 			}
 			elsif ($array->[$i] =~ $quiet) {
-				$level_ofs++;
-				splice( @$array, $i--, 1 ) if $spec->{remove};
+				$level_ofs--;
+				splice( @$array, $i--, 1 ) if $spec{remove};
 			}
 		}
 	};
 
-	$parse->( $spec->{array} );
+	$parse->( $spec{array} );
 	return $level_ofs;
 }
 
@@ -389,10 +482,10 @@ the log level.
 
 Basically:
 
-  $SIG{ $verbose_name }= sub { Log::Any::Adapter::Daemontools->global_log_level('-1'); }
+  $SIG{ $verbose_name }= sub { Log::Any::Adapter::Daemontools->global_log_level('+= 1'); }
     if $verbose_name;
   
-  $SIG{ $quiet_name   }= sub { Log::Any::Adapter::Daemontools->global_log_level('+1'); }
+  $SIG{ $quiet_name   }= sub { Log::Any::Adapter::Daemontools->global_log_level('-= 1'); }
     if $quiet_name;
 
 =cut
@@ -401,13 +494,13 @@ my %_handle_signal_args= ( debug => 1, log_level => 1 );
 sub handle_signals {
 	my ($class, %spec)= @_;
 	# Warn on unknown arguments
-	my @unknown= grep { !$_handle_signal_args{$_} } keys %$spec;
+	my @unknown= grep { !$_handle_signal_args{$_} } keys %spec;
 	carp "Invalid arguments: ".join(', ', @unknown) if @unknown;
 	
-	$SIG{ $spec{verbose} }= sub { $class->global_log_level('-1'); }
+	$SIG{ $spec{verbose} }= sub { $class->global_log_level('+= 1'); }
 		if $spec{verbose};
   
-	$SIG{ $spec{quiet}   }= sub { $class->global_log_level('+1'); }
+	$SIG{ $spec{quiet}   }= sub { $class->global_log_level('-= 1'); }
 		if $spec{quiet};
 }
 
@@ -451,7 +544,7 @@ sub global_log_level {
 		croak "extra arguments" if @_ > 1;
 		my $lev= shift;
 		$lev= $lev =~ /^-?\d+$/?          $lev
-			: $lev =~ /^([-+])= (\d+)$/?  $global_log_level + "$1$2"
+			: $lev =~ /^([-+])= (-?\d+)$/?  $global_log_level + "${1}1" * $2
 			: numeric_level($lev);
 		
 		$global_log_level= _clamp($global_log_level_min, $lev, $global_log_level_max);
@@ -519,12 +612,12 @@ sub category_log_level {
 		croak "extra arguments" if @_ > 1;
 		my $lev= shift;
 		if (!defined $lev) {
-			delete $category_level{$name};
+			delete $category_log_level{$name};
 		} else {
 			$lev= $lev =~ /^-?\d+$/?          $lev
 				: $lev =~ /^([-+])= (\d+)$/?  category_log_level($name) + "$1$2"
 				: numeric_level($lev);
-			$category_level{$name}= $lev;
+			$category_log_level{$name}= $lev;
 		}
 		$class->_squelch_uncache_all;
 	}
@@ -532,7 +625,7 @@ sub category_log_level {
 	# could change beyond the min/max set for the category.
 	_clamp(
 		__PACKAGE__->category_log_level_min($name),
-		(defined $category_level{$name}? $category_level{$name} : $global_log_level),
+		(defined $category_log_level{$name}? $category_log_level{$name} : $global_log_level),
 		__PACKAGE__->category_log_level_max($name)
 	);
 }
@@ -544,14 +637,14 @@ sub category_log_level_min {
 		croak "extra arguments" if @_ > 1;
 		my $lev= shift;
 		if (!defined $lev) {
-			delete $category_level_min{$name};
+			delete $category_log_level_min{$name};
 		} else {
-			$category_level_min{$name}= ($lev =~ /^-?\d+$/)? $lev : numeric_level($lev);
+			$category_log_level_min{$name}= ($lev =~ /^-?\d+$/)? $lev : numeric_level($lev);
 		}
 		$class->_squelch_uncache_all;
 	}
 	# return $category_level_min{$name} // $global_log_level_min -x- be compatible with older perls
-	my $r= $category_level_min{$name};
+	my $r= $category_log_level_min{$name};
 	$r= $global_log_level_min unless defined $r;
 	return $r;
 }
@@ -563,14 +656,14 @@ sub category_log_level_max {
 		croak "extra arguments" if @_ > 1;
 		my $lev= shift;
 		if (!defined $lev) {
-			delete $category_level_max{$name};
+			delete $category_log_level_max{$name};
 		} else {
-			$category_level_max{$name}= ($lev =~ /^-?\d+$/)? $lev : numeric_level($lev);
+			$category_log_level_max{$name}= ($lev =~ /^-?\d+$/)? $lev : numeric_level($lev);
 		}
 		$class->_squelch_uncache_all;
 	}
 	# return $category_level_max{$name} // $global_log_level_max -x- be compatible with older perls
-	my $r= $category_level_max{$name};
+	my $r= $category_log_level_max{$name};
 	$r= $global_log_level_max unless defined $r;
 	return $r;
 }
@@ -582,21 +675,6 @@ Adapter instances support all the standard logging methods of Log::Any::Adapter
 See L<Log::Any::Adapter>
 
 =cut
-
-BEGIN {
-	foreach my $method ( Log::Any->logging_methods(), 'fatal' ) {
-		# TODO: Make prefix and output handle customizable
-		my $prefix= $method eq 'info'? '' : "$method: ";
-		my $m= sub {
-			my $self= shift;
-			print $output_handle join('', $prefix, @_);
-		};
-		no strict 'refs';
-		*{__PACKAGE__ . "::$method"}= $m;
-		*{__PACKAGE__ . "::is_$method"}= sub { 1 };
-	}
-	__PACKAGE__->_build_squelch_subclasses();
-}
 
 sub _squelch_base_class { ref($_[0]) || $_[0] }
 
@@ -610,27 +688,27 @@ sub _build_squelch_subclasses {
 		my $package= $class.'::L'.($level_num >= 0? $level_num : '_');
 		$subclass{$package}{_squelch_base_class}= sub { $class };
 		foreach my $method (Log::Any->logging_methods(), 'fatal') {
-			if ($level_num > numeric_level($method)) {
+			if ($level_num < numeric_level($method)) {
 				$subclass{$package}{$method}= sub {};
 				$subclass{$package}{"is_$method"}= sub { 0 };
 			}
 		}
 	}
-	$subclass{"${class}::Unsquelched"}{_squelch_base_class}= sub { $class };
+	$subclass{"${class}::Lazy"}{_squelch_base_class}= sub { $class };
 	foreach my $method (Log::Any->logging_and_detection_methods(), 'fatal', 'is_fatal') {
 		# Trampoline code that lazily re-caches an adaptor the first time it is used
-		$subclass{"${class}::Unsquelched"}{$method}= sub {
+		$subclass{"${class}::Lazy"}{$method}= sub {
 			$_[0]->_squelch_recache;
-			goto shift->can($method)
+			goto $_[0]->can($method)
 		};
 	}
 	
 	# Create subclasses and install methods
-	for my $s (keys %subclass) {
-		push @{$s.'::ISA'}, $class unless defined @{$s.'::ISA'} && @{$s.'::ISA'};
-		for my $method (keys %{ $subclass{$s} }) {
-			no strict 'refs';
-			*{$s . '::' . $_}= $subclass{$s}{$method};
+	for my $pkg (keys %subclass) {
+		no strict 'refs';
+		push @{$pkg.'::ISA'}, $class unless defined @{$pkg.'::ISA'} && @{$pkg.'::ISA'};
+		for my $method (keys %{ $subclass{$pkg} }) {
+			*{$pkg.'::'.$method}= $subclass{$pkg}{$method};
 		}
 	}
 	1;
@@ -639,12 +717,28 @@ sub _build_squelch_subclasses {
 # The set of adapters which have been "squelch-cached"
 # (i.e. blessed into a subclass)
 our %_squelch_cached_adapters;
+BEGIN {
+	foreach my $method ( Log::Any->logging_methods(), 'fatal' ) {
+		# TODO: Make prefix and output handle customizable
+		my $prefix= $method eq 'info'? '' : "$method: ";
+		my $m= sub {
+			my $self= shift;
+			chomp(my $str= join('', @_));
+			$str =~ s/^/$prefix/mg;
+			print STDOUT $str."\n";
+		};
+		no strict 'refs';
+		*{__PACKAGE__ . "::$method"}= $m;
+		*{__PACKAGE__ . "::is_$method"}= sub { 1 };
+	}
+	__PACKAGE__->_build_squelch_subclasses();
+}
 
 # Bless an adapter into an appropriate squelch level
 sub _squelch_recache {
 	my $self= shift;
-	my $lev= $self->category_log_level($self->category);
-	my $package= $self->_squelch_base_class.'::L'.($level_num >= 0? $level_num : '_');
+	my $lev= $self->category_log_level($self->{category});
+	my $package= $self->_squelch_base_class.'::L'.($lev >= 0? $lev : '_');
 	# TODO: future overrides for prefix-per-category and handle-per-category
 	# would go here.
 	Scalar::Util::weaken( $_squelch_cached_adapters{Scalar::Util::refaddr $self}= $self );
@@ -653,7 +747,7 @@ sub _squelch_recache {
 
 # Re-bless all squelch-cached adapters back to their natural class
 sub _squelch_uncache_all {
-	bless $_, $_->_squelch_base_class
+	bless $_, $_->_squelch_base_class . '::Lazy'
 		for values %_squelch_cached_adapters;
 	%_squelch_cached_adapters= ();
 }
