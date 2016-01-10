@@ -137,8 +137,7 @@ sub global_config {
 sub new_config {
 	my $class= shift;
 	$class= ref($class) || $class;
-	my $cfg= "${class}::Config"->new;
-	$cfg->init(@_);
+	my $cfg= "${class}::Config"->new(@_);
 	return $cfg;
 }
 
@@ -185,8 +184,8 @@ sub init {
 	
 	$self->{config} ||= $self->global_config;
 	
-	$self->config->init( %{$self->{'-init'}} )
-		if $self->{'-init'} && !$self->config->_init_called;
+	$self->{config}->init( $self->{'-init'} )
+		if $self->{'-init'} && !$self->{config}->_init_called;
 	
 	# Set up our lazy caching system (re-blesses current object)
 	$self->_uncache_config;

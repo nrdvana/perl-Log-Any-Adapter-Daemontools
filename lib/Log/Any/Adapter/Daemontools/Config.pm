@@ -400,8 +400,17 @@ sub init {
 	my $self= shift;
 	$self->{_init_called}++; # track whether called for preventing suplicate "-init => {}"
 
-	my $cfg= (@_ == 1 and $_[0] eq 'HASH')? $_[0] : { @_ };
+	my $cfg= (@_ == 1 and ref $_[0] eq 'HASH')? $_[0] : { @_ };
 	
+	defined $cfg->{$_} and $self->log_level($cfg->{$_})
+		for qw: level log_level :;
+	
+	defined $cfg->{$_} and $self->log_level_min($cfg->{$_})
+		for qw: min level_min log_level_min :;
+	
+	defined $cfg->{$_} and $self->log_level_max($cfg->{$_})
+		for qw: max level_max log_level_max :;
+
 	# Optional ENV processing
 	if ($cfg->{env}) {
 		$self->process_env( %{
@@ -429,16 +438,7 @@ sub init {
 			: croak "Unknown \"signals\" value $cfg->{signals}"
 		} );
 	}
-	
-	$self->log_level($cfg->{level})
-		if defined $cfg->{level};
-	
-	$self->log_level_min($cfg->{level_min})
-		if defined $cfg->{level_min};
-	
-	$self->log_level_max($cfg->{level_max})
-		if defined $cfg->{level_max};
-	
+		
 	$self->format($cfg->{format})
 		if defined $cfg->{format};
 	
