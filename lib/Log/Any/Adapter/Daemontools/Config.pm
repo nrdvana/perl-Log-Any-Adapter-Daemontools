@@ -394,12 +394,8 @@ BEGIN {
 	};
 }
 
-sub _init_called { shift->{_init_called} }
-
 sub init {
 	my $self= shift;
-	$self->{_init_called}++; # track whether called for preventing suplicate "-init => {}"
-
 	my $cfg= (@_ == 1 and ref $_[0] eq 'HASH')? $_[0] : { @_ };
 	
 	defined $cfg->{$_} and $self->log_level($cfg->{$_})

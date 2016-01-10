@@ -184,9 +184,13 @@ sub init {
 	
 	$self->{config} ||= $self->global_config;
 	
-	$self->{config}->init( $self->{'-init'} )
-		if $self->{'-init'} && !$self->{config}->_init_called;
-	
+	# This constructor gets called for each Adapter instance, so we need
+	# to track whether we applied the -init to the config yet.
+	if ($self->{'-init'} && !$self->{config}{_adapter_init_applied}) {
+		++$self->{config}{_adapter_init_applied};
+		$self->{config}->init( $self->{'-init'} );
+	}
+
 	# Set up our lazy caching system (re-blesses current object)
 	$self->_uncache_config;
 }
