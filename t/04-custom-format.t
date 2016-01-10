@@ -48,6 +48,13 @@ my @tests= (
 	[ '"$_ at $file_brief"',        info    =>  'Test',   qr/^Test at \Q$log_call_file_name_brief\E$/ ],
 	[ '"$_ (line $line)"',          info    =>  'Test',   qr/^Test \(line \Q$log_call_line_number\E\)$/ ],
 	[ '"$_ ($package)"',            info    =>  'Test',   qr/^Test \(main\)$/ ],
+	[ 'numeric_level($level) > NOTICE? "$_ at $file_brief:$line\n" : "$_\n"',
+	                                notice  =>  'Test',   qr/^Test\n$/ ],
+	[ 'numeric_level($level) > NOTICE? "$_ at $file_brief:$line\n" : "$_\n"',
+	                                info    =>  'Test',   qr/^Test at \Q$log_call_file_name_brief:$log_call_line_number\E$/ ],
+	# Also test using coderef as format
+	[ sub { "$_[1]: (".$_[0]->category.") $_\n" },
+	                                info    => 'Test', qr/^info: \(testing\) Test\n$/ ],
 );
 test_format(@$_) for @tests;
 

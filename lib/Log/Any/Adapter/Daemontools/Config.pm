@@ -27,6 +27,8 @@ want in order to handle different categories separately.
 
 =cut
 
+use Log::Any::Adapter::Util 'numeric_level', ':levels';
+
 # At top of file where lexical scope is the cleanest
 sub _build_writer_eval_in_clean_scope {
 	# Args: $self, $code, \$err
@@ -38,7 +40,6 @@ sub _build_writer_eval_in_clean_scope {
 	return $coderef;
 }
 
-use Log::Any::Adapter::Util 'numeric_level', ':levels';
 use Scalar::Util 'weaken', 'refaddr';
 
 # Lazy-load carp, and also remove any Log::Any infrastructure from the trace
@@ -774,7 +775,7 @@ sub _build_writer_code {
 	
 	if (ref $format eq 'CODE') {
 		# Closure over '$format', rather than deparsing the coderef
-		$code .= ' map {; $format->($_) } split /\n/, $message)';
+		$code .= ' map {; $format->($adapter, $level) } split /\n/, $message)';
 	} else {
 		$code .= ' map {; '.$format.' } split /\n/, $message)'; 
 	}
