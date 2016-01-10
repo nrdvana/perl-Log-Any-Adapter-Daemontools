@@ -1,4 +1,31 @@
 package Log::Any::Adapter::Daemontools::Config;
+use strict;
+use warnings;
+
+# Abstract: Dynamic configuration settings used by Daemontools logging adapters
+
+=head1 DESCRIPTION
+
+When you use ..::Daemontools as the adapter for Log::Any, it creates one adapter
+per logging category.  In order to be able to change the logging level on the fly,
+we need shared variables that the adapters reference.
+
+Objects of this class are "config instances".  There is often only one
+(Log::Any::Adapter::Daemontools->global_config) but you can create as many as you
+want in order to handle different categories separately.
+
+=head1 SYNOPSIS
+
+  my $cfg= Log::Any::Adapter::Daemontools->new_config;
+  my $cfg2= Log::Any::Adapter::Daemontools->new_config;
+  Log::Any::Adapter->set({ category => qr/^Foo::Bar/ }, 'Daemontools', config => $cfg );
+  Log::Any::Adapter->set({ category => qr/^Baz/ }, 'Daemontools', config => $cfg2 );
+  
+  # Change log level independently
+  $cfg->log_level('info');
+  $cfg2->log_level('debug');
+
+=cut
 
 # At top of file where lexical scope is the cleanest
 sub _build_writer_eval_in_clean_scope {
@@ -11,10 +38,7 @@ sub _build_writer_eval_in_clean_scope {
 	return $coderef;
 }
 
-use strict;
-use warnings;
 use Log::Any::Adapter::Util 'numeric_level', ':levels';
-use Try::Tiny;
 use Scalar::Util 'weaken', 'refaddr';
 
 # Lazy-load carp, and also remove any Log::Any infrastructure from the trace
