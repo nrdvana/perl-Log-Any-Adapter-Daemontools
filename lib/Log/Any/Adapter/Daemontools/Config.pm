@@ -2,7 +2,7 @@ package Log::Any::Adapter::Daemontools::Config;
 use strict;
 use warnings;
 
-# Abstract: Dynamic configuration settings used by Daemontools logging adapters
+# ABSTRACT: Dynamic configuration settings used by Daemontools logging adapters
 
 =head1 DESCRIPTION
 

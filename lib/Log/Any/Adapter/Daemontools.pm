@@ -7,7 +7,7 @@ use Log::Any::Adapter::Util 'numeric_level';
 use Log::Any 1.03;
 use Log::Any::Adapter::Daemontools::Config;
 
-our $VERSION= '0.0900000_002';
+our $VERSION= '0.0900000_003';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
