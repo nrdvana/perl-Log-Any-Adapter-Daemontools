@@ -9,7 +9,7 @@ $SIG{__DIE__}= $SIG{__WARN__}= sub { diag @_; };
 
 use_ok( 'Log::Any::Adapter', 'Daemontools' ) || BAIL_OUT;
 
-my $laad= 'Log::Any::Adapter::Daemontools';
+my $cfg= Log::Any::Adapter::Daemontools->new_config;
 
 subtest debug_var => sub {
 	my @tests= (
@@ -23,9 +23,9 @@ subtest debug_var => sub {
 	);
 	for (@tests) {
 		my ($env_val, $level)= @$_;
-		$ENV{__TEST}= $env_val;
-		$laad->process_env( debug => '__TEST' );
-		is( $laad->global_log_level, $level, "DEBUG=$env_val  -> $level" );
+		local $ENV{__TEST}= $env_val;
+		$cfg->process_env( debug => '__TEST' );
+		is( $cfg->log_level_num, $level, "DEBUG=$env_val  -> $level" );
 	}
 };
 
@@ -38,9 +38,9 @@ subtest level_var => sub {
 	);
 	for (@tests) {
 		my ($env_val, $level)= @$_;
-		$ENV{__TEST}= $env_val;
-		$laad->process_env( log_level => '__TEST' );
-		is( $laad->global_log_level, $level, "LOG_LEVEL=$env_val  -> $level" );
+		local $ENV{__TEST}= $env_val;
+		$cfg->process_env( log_level => '__TEST' );
+		is( $cfg->log_level_num, $level, "LOG_LEVEL=$env_val  -> $level" );
 	}
 };
 

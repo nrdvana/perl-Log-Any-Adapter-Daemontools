@@ -9,7 +9,7 @@ $SIG{__DIE__}= $SIG{__WARN__}= sub { diag @_; };
 
 use_ok( 'Log::Any::Adapter', 'Daemontools' ) || BAIL_OUT;
 
-my $laad= 'Log::Any::Adapter::Daemontools';
+my $cfg= Log::Any::Adapter::Daemontools->new_config;
 
 subtest gnu_style => sub {
 	my @tests= (
@@ -35,7 +35,7 @@ subtest gnu_style => sub {
 	for (@tests) {
 		my ($val, $opts)= @$_;
 		my @array= split /\s/, $opts;
-		is( $laad->parse_log_level_opts(array => \@array, %gnu_cfg), $val, $opts );
+		is( $cfg->parse_log_level_opts(array => \@array, %gnu_cfg), $val, $opts );
 		is( join(' ',@array), $opts, 'unchanged' );
 	}
 };
@@ -53,7 +53,7 @@ subtest extract => sub {
 		[  1, '-vv --quiet', ''            ],
 		[  0, '-vqavq'     , '-a'          ],
 	);
-	my %cfg= (
+	my %argv_cfg= (
 		verbose => [ '--verbose', '-v' ],
 		quiet   => [ '--quiet', '-q' ],
 		stop    => '--',
@@ -63,7 +63,7 @@ subtest extract => sub {
 	for (@tests) {
 		my ($val, $opts, $new_opts)= @$_;
 		my @array= split /\s/, $opts;
-		is( $laad->parse_log_level_opts(array => \@array, %cfg), $val, "$opts => $new_opts" );
+		is( $cfg->parse_log_level_opts(array => \@array, %argv_cfg), $val, "$opts => $new_opts" );
 		is( join(' ',@array), $new_opts, 'correctly removed' );
 	}
 };
@@ -77,7 +77,7 @@ subtest argv => sub {
 		[  NOTICE, '-vv --quiet', '-vv'         ],
 		[  INFO,   '-vqavq'     , '-vqavq'      ],
 	);
-	my %cfg= (
+	my %argv_cfg= (
 		verbose => [ '--verbose', '-v' ],
 		quiet   => [ '--quiet', '-q' ],
 		remove  => 1,
@@ -85,9 +85,9 @@ subtest argv => sub {
 	for (@tests) {
 		my ($val, $opts, $new_opts)= @$_;
 		local @ARGV= split /\s/, $opts;
-		$laad->global_log_level('info');
-		$laad->process_argv(%cfg);
-		is($laad->global_log_level, $val, "$opts => $new_opts" );
+		$cfg->log_level('info');
+		$cfg->process_argv(%argv_cfg);
+		is($cfg->log_level_num, $val, "$opts => $new_opts" );
 		is( join(' ',@ARGV), $new_opts, 'correctly removed' );
 	}
 };

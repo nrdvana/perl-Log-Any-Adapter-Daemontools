@@ -65,13 +65,19 @@ BEGIN {
 		trace => TRACE,
 	);
 	%log_level_name= reverse %log_level_num;
+	
+	# Add the aliases to the name-to-value mapping
+	my %aliases= Log::Any::Adapter::Util::log_level_aliases();
+	for (keys %aliases) {
+		$log_level_num{$_}= $log_level_num{ $aliases{$_} };
+	}
 }
 
 sub _parse_log_level {
 	my ($spec, $base, $min, $max)= @_;
 	my $lev= $spec =~ /^-?\d+$/?         $spec
 		: $spec =~ /^([-+])= (-?\d+)$/?  $base + "${1}1" * $2
-		: $log_level_name{$spec};
+		: $log_level_num{$spec};
 	defined $lev or croak "Invalid log level '$spec'";
 	$min= EMERGENCY-1 unless defined $min;
 	$lev= $min unless $lev >= $min;
@@ -94,7 +100,7 @@ sub log_level {
 }
 
 sub log_level_min {
-	my $class= shift;
+	my $self= shift;
 	if (@_) {
 		croak "extra arguments" if @_ > 1;
 		$self->{log_level_min_num}= _parse_log_level($_[0], $self->{log_level_min_num}, EMERGENCY-1, $self->{log_level_max_num});
@@ -107,7 +113,7 @@ sub log_level_min {
 }
 
 sub log_level_max {
-	my $class= shift;
+	my $self= shift;
 	if (@_) {
 		croak "extra arguments" if @_ > 1;
 		$self->{log_level_max_num}= _parse_log_level($_[0], $self->{log_level_max_num}, $self->{log_level_min_num}, TRACE);
@@ -263,7 +269,11 @@ Constructor; accepts any of the attributes as arguments, as a hash or hashref.
 # I decided to do the same.
 sub new {
 	my $class= shift;
-	my $self= bless {}, $class;
+	my $self= bless {
+		log_level_num => INFO,
+		log_level_min => EMERGENCY-1,
+		log_level_max => TRACE
+	}, $class;
 	
 	# Convert hashref to plain key/value list
 	unshift @_, %{ shift @_ }
@@ -456,9 +466,9 @@ a shortcut for numeric_level( $self->log_level_max ).
 =cut
 
 # We lied.  This is the actual attribute in the implementation
-sub log_level_num { $self->{log_level_num} }
-sub log_level_min_num { $self->{log_level_min_num} }
-sub log_level_max_num { $self->{log_level_max_num} }
+sub log_level_num     { shift->{log_level_num} }
+sub log_level_min_num { shift->{log_level_min_num} }
+sub log_level_max_num { shift->{log_level_max_num} }
 
 =head2 log_level_adjust
 
@@ -504,7 +514,7 @@ sub process_env {
 	carp "Invalid arguments: ".join(', ', @unknown) if @unknown;
 	
 	if (defined $spec{log_level} && defined $ENV{$spec{log_level}}) {
-		$class->log_level($ENV{$spec{log_level}});
+		$self->log_level($ENV{$spec{log_level}});
 	}
 	if (defined $spec{debug} && defined $ENV{$spec{debug}}) {
 		$self->log_level( $self->debug_level_to_log_level($ENV{$spec{debug}}) );
@@ -529,7 +539,7 @@ with the supplied options, and updates the log level accordingly.
 my %_process_argv_args= ( bundle => 1, verbose => 1, quiet => 1, stop => 1, array => 1, remove => 1 );
 sub process_argv {
 	my $self= shift;
-	my $ofs= $class->parse_log_level_opts(array => \@ARGV, @_);
+	my $ofs= $self->parse_log_level_opts(array => \@ARGV, @_);
 	$self->log_level_adjust($ofs)
 		if $ofs;
 	1;
@@ -691,6 +701,7 @@ sub _build_writer_cache {
 # separate from _build_writer_cache so that test cases (and maybe subclasses)
 # can inspect the generated code.
 sub _build_writer_code {
+	my $self= shift;
 	my $format= $self->format;
 	my $code= '  my ($adapter, $level, $message)= @_;'."\n"
 			. '  $message =~ s/\n+$//;'."\n";
@@ -741,7 +752,7 @@ sub _register_cached_adapter {
 	my ($self, $adapter)= @_;
 	my $cache= $self->_cached_adapters;
 	push @$cache, $adapter;
-	weaken( $cache->[-1] );
+	Scalar::Util::weaken( $cache->[-1] );
 }
 
 # Inform all the Adapters who have cached our settings that the cache is invalid.

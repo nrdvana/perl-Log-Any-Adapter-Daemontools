@@ -129,12 +129,14 @@ specification for a logging adapter.
 
 =cut
 
+our $global_config;
 sub global_config {
 	$global_config ||= shift->new_config;
 }
 
 sub new_config {
 	my $class= shift;
+	$class= ref($class) || $class;
 	my $cfg= "${class}::Config"->new;
 	$cfg->init(@_);
 	return $cfg;
@@ -162,7 +164,7 @@ sub config   { shift->{config} }
 
 Not actually an attribute!  If you pass this to the Daemontools adapter,
 the first time an instance of the Adapter is created it will call ->init on
-the configuration.  This allows you to squeeze things onto one line.
+the adapter's configuration.  This allows you to squeeze things onto one line.
 
 The more proper way to write the above example is:
 
@@ -183,8 +185,8 @@ sub init {
 	
 	$self->{config} ||= $self->global_config;
 	
-	if ($self->{'-init'} && !$self->config->_init_called) {
-		$self->config->init( %{$self->{'-init'}} );
+	$self->config->init( %{$self->{'-init'}} )
+		if $self->{'-init'} && !$self->config->_init_called;
 	
 	# Set up our lazy caching system (re-blesses current object)
 	$self->_uncache_config;
@@ -220,7 +222,7 @@ sub _build_squelch_subclasses {
 	foreach my $method (Log::Any->logging_and_detection_methods(), 'fatal', 'is_fatal') {
 		# Trampoline code that lazily re-caches an adaptor the first time it is used
 		$subclass{"${class}::Lazy"}{$method}= sub {
-			$_[0]->_squelch_recache;
+			$_[0]->_cache_config;
 			goto $_[0]->can($method)
 		};
 	}

@@ -32,7 +32,7 @@ reset_stdout;
 $log->debug("test4");
 is( length $buf, 0, 'debug suppressed by default' );
 
-Log::Any::Adapter::Daemontools->global_log_level('debug');
+Log::Any::Adapter::Daemontools->global_config->log_level('debug');
 $log->debug("test5");
 like( $buf, qr/debug: test5\n/, 'debug un-suppressed' );
 
