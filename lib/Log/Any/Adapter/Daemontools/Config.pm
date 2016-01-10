@@ -1,20 +1,22 @@
 package Log::Any::Adapter::Daemontools::Config;
+
 # At top of file where lexical scope is the cleanest
 sub _build_writer_eval_in_clean_scope {
 	# Args: $self, $code, \$err
 	local $@;
-	my $output= $_[0]->output;
-	my $format= $_[0]->format;
+	my $output= $_[0]->output; # Needs to be in scope
+	my $format= $_[0]->format; # of the eval
 	my $coderef= eval $_[1];
-	${ $_[2] }= $@ if defined $_[0];
+	${ $_[2] }= $@ if defined $_[0]; # Save error because $@ is localized
 	return $coderef;
 }
+
 use strict;
 use warnings;
 use Log::Any::Adapter::Util 'numeric_level', ':levels';
 use Try::Tiny;
 use Carp 'croak', 'carp';
-require Scalar::Util;
+use Scalar::Util 'weaken', 'refaddr';
 
 =head1 ATTRIBUTES
 
@@ -744,9 +746,19 @@ sub _build_writer_code {
 	return $code;
 }
 
-# Holds a list of weak references to Adapter instances which have cached values form this config
+# "Cached Adapters" would more properly be a field of the config object, but then
+# it shows a giant mess if/when you Dump() the object, so I'm using this trick
+# to keep the list attached to the package instead of the object.
+# Object destructor cleans up the list.
+our %_cached_adapters;
+
+# Holds a list of weak references to Adapter instances which have cached values from this config
 sub _cached_adapters {
-	$_[0]{_cached_adapters} ||= [];
+	# Use refaddr in case someone subclasses and gets creative with re-blessing objects
+	$_cached_adapters{refaddr $_[0]} ||= [];
+}
+sub DESTROY {
+	delete $_cached_adapters{refaddr $_[0]};
 }
 
 # Called by an adapter after it caches things from this config to ask that it
@@ -755,7 +767,7 @@ sub _register_cached_adapter {
 	my ($self, $adapter)= @_;
 	my $cache= $self->_cached_adapters;
 	push @$cache, $adapter;
-	Scalar::Util::weaken( $cache->[-1] );
+	weaken( $cache->[-1] );
 }
 
 # Inform all the Adapters who have cached our settings that the cache is invalid.
