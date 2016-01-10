@@ -30,11 +30,12 @@ subtest output_globref => sub {
 	done_testing;
 };
 
-package Test::PrintableObject {
-	sub new { bless {}, shift; }
-	sub print { shift->{buf} .= join(',', @_); }
-	sub buf { shift->{buf} }
-};
+package Test::PrintableObject;
+sub new { bless {}, shift; }
+sub print { shift->{buf} .= join(',', @_); }
+sub buf { shift->{buf} }
+package main;
+
 subtest output_object => sub {
 	my $out= Test::PrintableObject->new;
 	$cfg->output($out);
