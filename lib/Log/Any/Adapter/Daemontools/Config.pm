@@ -673,7 +673,7 @@ sub install_signal_handlers {
 	$SIG{ $spec{verbose} }= sub { $self->log_level_adjust(1); }
 		if $spec{verbose};
   
-	$SIG{ $spec{quiet}   }= sub { $self->log_level_adjust(1); }
+	$SIG{ $spec{quiet}   }= sub { $self->log_level_adjust(-1); }
 		if $spec{quiet};
 }
 

@@ -3,8 +3,7 @@
 BEGIN { @ARGV= qw( -vv -a foo --quiet -b bar -- a b c --verbose ) }
 use Test::More;
 use Log::Any '$log';
-
-use_ok( 'Log::Any::Adapter', 'Daemontools', -init => {
+use Log::Any::Adapter 'Daemontools', -init => {
 	level => 'error',
 	argv => {
 		verbose => ['-v','--verbose'],
@@ -13,7 +12,7 @@ use_ok( 'Log::Any::Adapter', 'Daemontools', -init => {
 		remove => 1,
 		bundle => 1
 	}
-} );
+};
 
 ok( $log->is_warning, 'warning enabled' );
 ok( !$log->is_notice, 'notice squelched' );
