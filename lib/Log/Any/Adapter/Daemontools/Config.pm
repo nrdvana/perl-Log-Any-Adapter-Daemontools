@@ -6,20 +6,22 @@ use warnings;
 
 =head1 DESCRIPTION
 
-When you use ..::Daemontools as the adapter for Log::Any, it creates one adapter
-per logging category.  In order to be able to change the logging level on the fly,
-we need shared variables that the adapters reference.
+When you use L<Log::Any::Adapter::Daemontools> as the adapter for L<Log::Any>,
+it creates one adapter per logging category.  If you set the log level as an
+attribute of the adapter, each adapter will have a copy and there is no
+practical way to reach out and change them. (other than resetting the adapters
+with a new configuration, which is a slightly expensive operation, and awkward)
+So, to make dynamic configuration changes easy, adapters reference these Config
+objects which hold the shared state.
 
-Objects of this class are "config instances".  There is often only one
-(Log::Any::Adapter::Daemontools->global_config) but you can create as many as you
-want in order to handle different categories separately.
+There is one default Config instance (L<global_config|Log::Any::Adapter::Daemontools/global_config>)
+but you can create as many as you want in order to handle different categories
+separately.
 
 =head1 SYNOPSIS
 
-  my $cfg= Log::Any::Adapter::Daemontools->new_config;
-  my $cfg2= Log::Any::Adapter::Daemontools->new_config;
-  Log::Any::Adapter->set({ category => qr/^Foo::Bar/ }, 'Daemontools', config => $cfg );
-  Log::Any::Adapter->set({ category => qr/^Baz/ }, 'Daemontools', config => $cfg2 );
+  Log::Any::Adapter->set({ category => qr/^Foo::Bar/ }, 'Daemontools', config => \my $cfg );
+  Log::Any::Adapter->set({ category => qr/^Baz/ },      'Daemontools', config => \my $cfg2 );
   
   # Change log level independently
   $cfg->log_level('info');
@@ -61,11 +63,14 @@ sub croak { require Carp; local $Carp::CarpLevel= _carp_exclude; &Carp::croak; }
   $config->log_level( 99 );     # 'trace' (clamped to max)
   $config->log_level( 3 );      # 'error'
   $config->log_level( '+= 1' ); # 'warning'
-  $config->log_level( '-= 9' ); # 'emergency' (clamped to min)
+  $config->log_level( '-= 9' ); # 'none' (clamped to min)
 
 Get or set the current log level.  Can be assigned with either a name
-or a number, or "+= N" syntax.  (but use L<log_level_adjust> for that)
+or a number, or C<"+= N"> syntax.  (but use L</log_level_adjust> for that)
 Returns the level name.
+
+Accepts any of the names and aliases defined in L<Log::Adapter::Any::Util>
+but also the string C<'none'> (and value -1) to completely stop all logging.
 
 =head2 log_level_min
 
@@ -82,7 +87,7 @@ Returns the level name.
 
 Get or set the maximum allowed log level.
 Log levels above the maximum are silently clamped.
-Can be assigned either a name or number, or "+= N" syntax.
+Can be assigned either a name or number, or C<"+= N"> syntax.
 Returns the level name.
 
 =cut
@@ -164,18 +169,18 @@ sub log_level_max {
 
 =head2 output
 
-This is the handle (or coderef) log messages are written to.  If it is a
-handle (either a GLOB ref or class which can ->print) we call ->print on it.
-If it is a coderef, we pass the same arguments that would be given to print.
+This is the handle (or coderef) log messages are written to.  (but if you set
+L</writer> to a custom coderef, this attribute is ignored completely)
+
+If it is a handle (either a GLOB ref or class which C<can('print')>) we call its
+C<print> method.
+If it is a coderef, we pass the same arguments that would be given to C<print>.
 
 If a message from Log::Any contains newlines, they are broken into separate
-strings (but still ending with newline) so be ready to receive multiple
-arguments.
+strings (but still ending with newline) and passed as a list, so the print
+method or coderef should print its entire argument list.
 
-(But if you set L<writer> to a custom coderef, this attribute is ignored
- completely)
-
-The default is \*STDERR.
+The default is C<\*STDERR>.
 
 =cut
 
@@ -194,15 +199,16 @@ sub output {
 
 =head2 format
 
-This attrbute determines how messages are formatted into text lines.  It is a
-*string* of perl code (or a coderef) which executes within the following context:
+  $cfg->format( '$level eq "trace"? "$level: $_ at $file_brief line $line" : "$level_prefix$_"' )
+
+This attrbute determines how messages are formatted into text lines.
+(But if you set L</writer> to a custom coderef, this attribute is ignored completely.)
+
+It is a B<string of perl code> (or a coderef) which executes within the following context:
 
   $output->print( map { eval $format } split /\n/, $message );
 
-(But if you set L<writer> to a custom coderef, this attribute is ignored
- completely)
-
-The following variables become available if seen in your string of code:
+The following variables and functions are available for your string of code:
 
 =over
 
@@ -220,27 +226,36 @@ The name of the log level
 
 =item $level_prefix
 
-The default behavior of "$level: " for all levels except info which is ''.
+The default prefix behavior (C<"$level: "> for all levels except info, which is an empty string)
+
+=item numeric_level(...)
+
+The utility method from L<Log::Any::Adapter::Util>, useful for comparing levels.
 
 =item $file
 
-The full filename from caller()
+The full filename from C<caller()>
 
 =item $file_brief
 
-The filename from caller() minus the library path (best guess, no guarantees)
+The filename from C<caller()> minus the library path (best guess, no guarantees)
 
 =item $line
 
-The line number from caller()
+The line number from C<caller()>
 
 =item $package
 
-The package name from caller()
+The package name from C<caller()>
 
 =back
 
-The default is C<'"$level_prefix$_\n"'>
+If you use a coderef, you get C<$_> (a single line of the message), and arguments of
+C<($adapter, $level)>.  It should return a string ending with newline.
+
+  sub { my ($adapter, $level)= @_; return "$_\n"; }
+
+The default value is C<'"$level_prefix$_\n"'>
 
 =cut
 
@@ -272,15 +287,16 @@ sub format {
 =head2 writer
 
 If specified, this coderef overrides the routine that would have been built
-from L<output> and L<format>.
+from L</output> and L</format>.
 
 Its arguments are:
 
   sub { my ($adapter, $level, $message)= @_; ... };
 
 where $level is the level name, and adapter is an instance of
-Log::Any::Adapter::Daemontools.  (and the adapter attributes you are probably
-most interested in are 'category' and 'config').
+L<Log::Any::Adapter::Daemontools>.  (and the adapter attributes you are probably
+most interested in are L<category|Log::Any::Adapter::Daemontools/category> and
+L<config|Log::Any::Adapter::Daemontools/config>).
 
 =cut
 
@@ -332,15 +348,20 @@ Different from a constructor, this method takes a hashref of short aliases
 and notations and calls various methods that might have effects outside of
 this object.
 The primary purpose is to provide convenient initialization of the global
-logging configuration.  The following are provided:
+logging configuration.
+
+DO NOT pass un-sanitized user input to init(), because the 'format' attribute
+is processed as perl code.
+
+The following are provided:
 
 =over
 
-=item env
+=item env, or process_env
 
   env => $name_or_args
 
-Convenient passthrough to L<process_env> method.
+Convenient passthrough to L</process_env> method.
 
 If env is a hashref, it is passed directly.  If it is a scalar, it is
 interpreted as a pre-defined "profile" of arguments.
@@ -355,11 +376,11 @@ Profiles:
 
 =back
 
-=item argv
+=item argv, or process_argv
 
   argv => $name_or_args
 
-Convenient passthrough to L<process_argv>.
+Convenient passthrough to L</process_argv>.
 
 If argv is a hashref, it is passed directly.  If it is a scalar, it is
 interpreted as a pre-defined "profile" of arguments.
@@ -381,39 +402,39 @@ Profiles:
 
 =back
 
-=item signals
+=item signals, handle_signals, or install_signal_handlers
 
   signals => [ $v, $q ],
   signals => { verbose => $v, quiet => $q },
 
-Convenient passthrough to L<install_signal_handlers>.
+Convenient passthrough to L</install_signal_handlers>.
 
-If handle_signals is an arrayref of length 2, they are used as the verbose and
+If signals is an arrayref of length 2, they are used as the verbose and
 quiet parameters, respectively.  If it is a hashref, it is passed directly.
 
-=item level
+=item level, or log_level
 
-Sets L<log_level>
+Sets L</log_level>
 
-=item min
+=item min, level_min, or log_level_min
 
-Sets L<log_level_min>
+Sets L</log_level_min>
 
-=item max
+=item max, level_max, or log_level_max
 
-Sets L<log_level_max>
+Sets L</log_level_max>
 
 =item format
 
-Sets L<format>
+Sets L</format>
 
-=item out
+=item out, or output
 
-Sets L<output>
+Sets L</output>
 
 =item writer
 
-Sets L<writer>
+Sets L</writer>
 
 =cut
 
@@ -430,7 +451,7 @@ BEGIN {
 
 my %_init_args= map { $_ => 1 } qw(
 	level log_level min level_min log_level_min max level_max log_level_max
-	env argv signals format output writer
+	env argv signals handle_signals install_signal_handlers format out output writer
 );
 sub init {
 	my $self= shift;
@@ -449,38 +470,36 @@ sub init {
 		for qw: max level_max log_level_max :;
 
 	# Optional ENV processing
-	if ($cfg->{env}) {
+	defined $cfg->{$_} and do {
+		my $v= $cfg->{$_};
 		$self->process_env( %{
-			ref $cfg->{env} eq 'HASH'? $cfg->{env}
-			: $env_profile{$cfg->{env}}
-				|| croak "Unknown \"env\" value $cfg->{env}"
+			ref $v eq 'HASH'? $v : $env_profile{$v} || croak "Unknown \"$_\" value $v"
 		} );
-	}
+	} for qw: env process_env :;
 	
 	# Optional ARGV parsing
-	if ($cfg->{argv}) {
+	defined $cfg->{$_} and do {
+		my $v= $cfg->{$_};
 		$self->process_argv( %{
-			ref $cfg->{argv} eq 'HASH'? $cfg->{argv}
-			: $argv_profile{$cfg->{argv}}
-				|| croak "Unknown \"argv\" value $cfg->{argv}"
+			ref $v eq 'HASH'? $v : $argv_profile{$v} || croak "Unknown \"$_\" value $v"
 		} );
-	}
+	} for qw: argv process_argv :;
 	
 	# Optional installation of signal handlers
-	if ($cfg->{signals}) {
-		my $r= ref($cfg->{signals}) || '';
+	defined $cfg->{$_} and do {
+		my $rt= ref($cfg->{$_}) || '';
 		$self->install_signal_handlers( %{
-			$r eq 'HASH'? $cfg->{signals}
-			: $r eq 'ARRAY'? { verbose => $cfg->{signals}[0], quiet => $cfg->{signals}[1] }
-			: croak "Unknown \"signals\" value $cfg->{signals}"
+			$rt eq 'HASH'? $cfg->{$_}
+			: $rt eq 'ARRAY'? { verbose => $cfg->{$_}[0], quiet => $cfg->{$_}[1] }
+			: croak "Unknown \"$_\" value $cfg->{$_}"
 		} );
-	}
+	} for qw: signals handle_signals install_signal_handlers :;
 		
 	$self->format($cfg->{format})
 		if defined $cfg->{format};
 	
-	$self->output($cfg->{output})
-		if defined $cfg->{output};
+	defined $cfg->{$_} and $self->output($cfg->{$_})
+		for qw: out output :;
 	
 	$self->writer($cfg->{writer})
 		if defined $cfg->{writer};
@@ -490,18 +509,18 @@ sub init {
 
 =head2 log_level_num
 
-The current log level, returned as a number.  This is *NOT* a writeable attribute, just
-a shortcut for numeric_level( $self->log_level )
+The current log level, returned as a number.  This is B<NOT> a writeable attribute, just
+a shortcut for C<< numeric_level( $self->log_level ) >>.
 
 =head2 log_level_min_num
 
-The current minimum, returned as a number.  This is *NOT* a writeable attribute, just
-a shortcut for numeric_level( $self->log_level_min ).
+The current minimum, returned as a number.  This is B<NOT> a writeable attribute, just
+a shortcut for C<< numeric_level( $self->log_level_min ) >>.
 
 =head2 log_level_max_num
 
-The current maximum, returned as a number.  This is *NOT* a writeable attribute, just
-a shortcut for numeric_level( $self->log_level_max ).
+The current maximum, returned as a number.  This is B<NOT> a writeable attribute, just
+a shortcut for C<< numeric_level( $self->log_level_max ) >>.
 
 =cut
 
@@ -534,9 +553,9 @@ sub log_level_adjust {
   $config->process_env( log_level => $ENV_VAR_NAME );
 
 Request that this package check for the named variable(s), and if set,
-interpret it either as a debug level or a log level, and then set L<log_level>.
+interpret it either as a debug level or a log level, and then set L</log_level>.
 
-A log_level environment variable is applied directly to the L<log_level> attribute.
+A log_level environment variable is applied directly to the L</log_level> attribute.
 
 A "debug level" environment variable refers to the typical Unix practice of a
 variable named DEBUG where 0 is disabled, 1 is enabled, and larger numbers

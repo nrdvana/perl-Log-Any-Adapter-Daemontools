@@ -18,10 +18,13 @@ our $VERSION= '0.0900000_003';
   use Log::Any::Adapter 'Daemontools';
   
   # As above, but log level 'notice'
-  use Log::Any::Adapter 'Daemontools', init => { level => 'notice' };
+  use Log::Any::Adapter 'Daemontools', -init => { level => 'notice' };
   
   # As above, but process @ARGV -v/-q and $ENV{DEBUG} to adjust the level
-  use Log::Any::Adapter 'Daemontools', init => { argv => 1, env => 1 };
+  use Log::Any::Adapter 'Daemontools', -init => { argv => 1, env => 1 };
+  
+  # Custom output formatting
+  use Log::Any::Adapter 'Daemontools', -init => { format => '"$level: $_ (at $file on line $line)"' };
   
   # Direct edits to shared config
   my $cfg= Log::Any::Adapter::Daemontools->global_config;
@@ -32,21 +35,20 @@ our $VERSION= '0.0900000_003';
   $SIG{USR1}= sub { $cfg->log_level_adjust(1); };
   $SIG{USR2}= sub { $cfg->log_level_adjust(-1); };
   
-  # Signal handlers can also be installed by the config:
-  $cfg->init( handle_signals => ['USR1','USR2'] );
+  # Those signal handlers can also be installed by the config:
+  use Log::Any::Adapter 'Daemontools', -init => { signals => ['USR1','USR2'] };
   
   # Create a second config independent of the global config
   my $cfg2= Log::Any::Adapter::Daemontools->new_config;
   
-  # Multiple adapter configurations, tracking different config instances
-  Log::Any::Adapter->set({ category => qr/^Noisy::Package.*/ }, 'Daemontools', config => $cfg2 );
-  Log::Any::Adapter->set('Daemontools'); # config defaults to global_config
-  $cfg2->log_level('warn'); # lower log level for messages from Noisy::Package::*
+  # Or from the use line:
+  Log::Any::Adapter 'Daemontools', config => \my $cfg2, -init => { ... };
   
-  # Like above, but limit the verbosity instead of creating a second config
-  Log::Any::Adapter->set({ category => qr/^Noisy::Package.*/ }, 'Daemontools', log_level_max => 'warn' );
-  Log::Any::Adapter->set('Daemontools'); # config defaults to global_config
-
+  # Multiple adapter configurations, tracking different config instances
+  Log::Any::Adapter->set({ category => qr/^Noisy::Package.*/ }, 'Daemontools',
+	config => \my $cfg2, -init => { level => 'warn' } );
+  Log::Any::Adapter->set('Daemontools');
+  
 See L<Log::Any::Adapter::Daemontools::Config> for most of the details.
 
 =head1 DESCRIPTION
@@ -126,6 +128,29 @@ I don't know if anyone was using them anyway, but pay close attention
 if you are upgrading.  This new version adheres more closely to the
 specification for a logging adapter.
 
+=head1 PACKAGE METHODS
+
+=head2 global_config
+
+  my $cfg= Log::Any::Adapter::Daemontools->global_config;
+
+Returns the default config instance used by any adapter where you didn't
+specify one.
+
+=head2 new_config
+
+  my $cfg= Log::Any::Adapter::Daemontools->new_config( %attributes )
+
+Returns a new instance of a config object appropriate for use with this
+adapter, but currently always an instance of L<Log::Any::Adapter::Daemontools::Config>.
+See that package for available attributes.
+
+  Log::Any::Adapter->set( 'Daemontools', config => $cfg );
+
+This method is preferred over calling ->new on the L<Log::Any::Adapter::Daemontools::Config>
+package directly, in case some day I decide to play subclassing tricks with the
+Config objects.
+
 =cut
 
 our $global_config;
@@ -174,6 +199,9 @@ The implied init() call will happen exactly once per config object.
 
 See L<Log::Any::Adapter::Daemontools::Config/init> for the complete list
 of initialization options.
+
+DO NOT pass un-sanitized user input to -init, because the 'format' attribute
+is processed as perl code.
 
 =cut
 
