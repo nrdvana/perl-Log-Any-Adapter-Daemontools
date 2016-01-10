@@ -209,7 +209,7 @@ sub _build_squelch_subclasses {
 	my %numeric_levels= ( map { $_ => 1 } -1, map { numeric_level($_) } Log::Any->logging_methods() );
 	my %subclass;
 	foreach my $level_num (keys %numeric_levels) {
-		my $package= $class.'::L'.($level_num >= 0? $level_num : '_');
+		my $package= $class.'::Squelch'.($level_num+1);
 		$subclass{$package}{_squelch_base_class}= sub { $class };
 		foreach my $method (Log::Any->logging_methods(), 'fatal') {
 			if ($level_num < numeric_level($method)) {
@@ -243,15 +243,8 @@ sub _build_squelch_subclasses {
 our %_squelch_cached_adapters;
 
 BEGIN {
-	foreach my $method ( Log::Any->logging_methods(), 'fatal' ) {
-		# TODO: Make prefix and output handle customizable
-		my $prefix= $method eq 'info'? '' : "$method: ";
-		my $m= sub {
-			my $self= shift;
-			chomp(my $str= join('', @_));
-			$str =~ s/^/$prefix/mg;
-			print STDOUT $str."\n";
-		};
+	foreach my $method ( Log::Any->logging_methods() ) {
+		my $m= sub { my $self= shift; $self->{_writer}->($self, $method, @_); };
 		no strict 'refs';
 		*{__PACKAGE__ . "::$method"}= $m;
 		*{__PACKAGE__ . "::is_$method"}= sub { 1 };
@@ -263,9 +256,9 @@ BEGIN {
 # re-blesses it based on the current log level.
 sub _cache_config {
 	my $self= shift;
-	$self->{_writer}= $self->config->writer;
+	$self->{_writer}= $self->config->compiled_writer;
 	my $lev= $self->config->log_level_num;
-	bless $self, $self->_squelch_base_class.'::L'.($lev >= 0? $lev : '_');
+	bless $self, $self->_squelch_base_class.'::Squelch'.($lev+1);
 	$self->config->_register_cached_adapter($self);
 }
 

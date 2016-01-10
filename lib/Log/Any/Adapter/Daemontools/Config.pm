@@ -5,8 +5,9 @@ sub _build_writer_eval_in_clean_scope {
 	local $@;
 	my $output= $_[0]->output;
 	my $format= $_[0]->format;
-	eval $_[1];
-	${ $_[2] }= $@ if defined $_[0]
+	my $coderef= eval $_[1];
+	${ $_[2] }= $@ if defined $_[0];
+	return $coderef;
 }
 use strict;
 use warnings;
@@ -152,7 +153,7 @@ sub output {
 		delete $self->{_writer_cache};
 		$self->_reset_cached_adapters unless $self->{writer};
 	}
-	return defined $self->{output}? $self->{output} : \*STDERR;
+	return defined $self->{output}? $self->{output} : \*STDOUT;
 }
 
 =head2 format
@@ -229,7 +230,7 @@ sub format {
 		delete $self->{_writer_cache};
 		$self->_reset_cached_adapters unless $self->{writer};
 	}
-	defined $self->{format}? $self->{format} : '$level_prefix$_\n';
+	defined $self->{format}? $self->{format} : '"$level_prefix$_\n"';
 }
 
 =head2 writer
@@ -271,8 +272,8 @@ sub new {
 	my $class= shift;
 	my $self= bless {
 		log_level_num => INFO,
-		log_level_min => EMERGENCY-1,
-		log_level_max => TRACE
+		log_level_min_num => EMERGENCY-1,
+		log_level_max_num => TRACE,
 	}, $class;
 	
 	# Convert hashref to plain key/value list
@@ -694,8 +695,10 @@ sub compiled_writer {
 sub _build_writer_cache {
 	my $self= shift;
 	my $code= "sub {  \n" . $self->_build_writer_code . "\n}";
-	my $writer= $self->_build_writer_eval_in_clean_scope( $code, \my $err );
-	croak "Compilation of log writer failed: $err\nSource code is: $code";
+	my $err;
+	my $writer= $self->_build_writer_eval_in_clean_scope( $code, \$err )
+		or croak "Compilation of log writer failed: $err\nSource code is: $code";
+	return $writer;
 }
 
 # separate from _build_writer_cache so that test cases (and maybe subclasses)
@@ -711,7 +714,7 @@ sub _build_writer_code {
 	}
 	if ($format =~ /\$\{?(package|file|line|file_brief)(\W|$)/) {
 		$code .= '  my ($package,$file,$line);'."\n"
-				.'  { my $i= 0; ($package, $file, $line)= caller(++$i) while $package =~ /^Log::Any/; }'."\n";
+				.'  { my $i= 0; do { ($package, $file, $line)= caller(++$i) } while $package =~ /^Log::Any/; };'."\n";
 		
 		$code .= '  my $file_brief= $file;'."\n"
 				.'  $file_brief =~ s|.*[\\/]lib[\\/]||;'."\n"
@@ -733,9 +736,9 @@ sub _build_writer_code {
 	
 	if (ref $format eq 'CODE') {
 		# Closure over '$format', rather than deparsing the coderef
-		$code .= ' map { $format->($_) } split /\n/, $message)';
+		$code .= ' map {; $format->($_) } split /\n/, $message)';
 	} else {
-		$code .= ' map { {'.$format.'}; } split /\n/, $message)'; 
+		$code .= ' map {; '.$format.' } split /\n/, $message)'; 
 	}
 
 	return $code;
