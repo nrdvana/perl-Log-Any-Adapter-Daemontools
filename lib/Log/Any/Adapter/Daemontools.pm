@@ -6,7 +6,6 @@ use warnings;
 use Log::Any::Adapter::Util 'numeric_level';
 use Log::Any 1.03;
 use Log::Any::Adapter::Daemontools::Config;
-use Carp 'croak', 'carp';
 
 our $VERSION= '0.0900000_002';
 

@@ -15,8 +15,17 @@ use strict;
 use warnings;
 use Log::Any::Adapter::Util 'numeric_level', ':levels';
 use Try::Tiny;
-use Carp 'croak', 'carp';
 use Scalar::Util 'weaken', 'refaddr';
+
+# Lazy-load carp, and also remove any Log::Any infrastructure from the trace
+our @CARP_NOT= qw( Log::Any::Adapter::Base Log::Any::Adapter Log::Any::Proxy Log::Any );
+sub _carp_exclude {
+	my $i= 1;
+	++$i while caller($i) =~ /^Log::Any/;
+	return $i;
+}
+sub carp  { require Carp; local $Carp::CarpLevel= _carp_exclude; &Carp::carp; }
+sub croak { require Carp; local $Carp::CarpLevel= _carp_exclude; &Carp::croak; }
 
 =head1 ATTRIBUTES
 
@@ -394,9 +403,16 @@ BEGIN {
 	};
 }
 
+my %_init_args= map { $_ => 1 } qw(
+	level log_level min level_min log_level_min max level_max log_level_max
+	env argv signals format output writer
+);
 sub init {
 	my $self= shift;
 	my $cfg= (@_ == 1 and ref $_[0] eq 'HASH')? $_[0] : { @_ };
+	# Warn on unknown arguments
+	my @unknown= grep { !$_init_args{$_} } keys %$cfg;
+	carp "Invalid arguments: ".join(', ', @unknown) if @unknown;
 	
 	defined $cfg->{$_} and $self->log_level($cfg->{$_})
 		for qw: level log_level :;
@@ -663,7 +679,7 @@ Basically:
 
 =cut
 
-my %_handle_signal_args= ( debug => 1, log_level => 1 );
+my %_handle_signal_args= ( verbose => 1, quiet => 1 );
 sub install_signal_handlers {
 	my ($self, %spec)= @_;
 	# Warn on unknown arguments
