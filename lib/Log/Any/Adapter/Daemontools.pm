@@ -213,8 +213,8 @@ sub init {
 	$self->{config} ||= $self->global_config;
 	
 	# Warn about unsupported/deprecated features from 0.002
-	carp "filter is deprecated.  Use config->log_level" if defined $self->{filter};
-	carp "dumper is unsupported. See Log::Any::Proxy" if defined $self->{dumper};
+	carp "filter is deprecated.  Use config->log_level" if exists $self->{filter};
+	carp "dumper is unsupported. See Log::Any::Proxy" if exists $self->{dumper};
 	
 	
 	# This constructor gets called for each Adapter instance, so we need
