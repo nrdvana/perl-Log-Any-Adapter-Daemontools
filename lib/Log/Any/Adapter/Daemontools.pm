@@ -205,11 +205,20 @@ is processed as perl code.
 
 =cut
 
+# Special carp/croak that ignore Log::Any infrastructure
+sub carp { Log::Any::Adapter::Daemontools::Config::carp(@_) }
+sub croak { Log::Any::Adapter::Daemontools::Config::croak(@_) }
+
 # Log::Any::Adapter constructor, also named 'init'
 sub init {
 	my $self= shift;
 	
 	$self->{config} ||= $self->global_config;
+	
+	# Warn about unsupported/deprecated features from 0.002
+	carp "filter is deprecated.  Use config->log_level" if defined $self->{filter};
+	carp "dumper is unsupported. See Log::Any::Proxy" if defined $self->{dumper};
+	
 	
 	# This constructor gets called for each Adapter instance, so we need
 	# to track whether we applied the -init to the config yet.
@@ -288,6 +297,10 @@ sub _cache_config {
 	my $self= shift;
 	$self->{_writer}= $self->config->compiled_writer;
 	my $lev= $self->config->log_level_num;
+	# Backward compatibility with version 0.002
+	if (exists $self->{filter}) {
+		$lev= Log::Any::Adapter::Util::NOTICE - _coerce_filter_level($self->{filter});
+	}
 	bless $self, $self->_squelch_base_class.'::Squelch'.($lev+1);
 	$self->config->_register_cached_adapter($self);
 }
@@ -295,6 +308,48 @@ sub _cache_config {
 # Re-bless adapter back to its "Lazy" config cacher class
 sub _uncache_config {
 	bless $_[0], $_[0]->_squelch_base_class . '::Lazy';
+}
+
+#-------------------------------------------------------------------
+# Backward compatibility with version 0.002.  Do not use in new code.
+
+sub write_msg {
+	my ($self, $level, $message)= @_;
+	# Don't bother optimizing and caching
+	$self->config->compiled_writer->($self, $level, $message);
+}
+
+sub _default_dumper {
+	require Data::Dumper;
+	my $val= shift;
+	local $@;
+	my $dump= eval { Data::Dumper->new([$val])->Indent(0)->Terse(1)->Useqq(1)->Quotekeys(0)->Maxdepth(4)->Sortkeys(1)->Dump };
+	if (!defined $dump) {
+		my $x= "$@";
+		$x =~ s/\n//;
+		substr($x, 50)= '...' if length $x >= 50;
+		$dump= "<exception $x>";
+	};
+	return $dump;
+}
+
+sub _coerce_filter_level {
+	my $val= shift;
+	my %level_map= (
+		trace    => -2,
+		debug    => -1,
+		info     =>  0,
+		notice   =>  1,
+		warning  =>  2,
+		error    =>  3,
+		critical =>  4,
+		fatal    =>  4,
+	);
+	return (!defined $val || $val eq 'none')? $level_map{trace}-1
+		: Scalar::Util::looks_like_number($val)? $val
+		: exists $level_map{$val}? $level_map{$val}
+		: ($val =~ /^debug-(\d+)$/)? $level_map{debug} - $1
+		: croak "unknown log level '$val'";
 }
 
 1;
