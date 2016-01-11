@@ -20,10 +20,15 @@ separately.
 
 =head1 SYNOPSIS
 
-  Log::Any::Adapter->set({ category => qr/^Foo::Bar/ }, 'Daemontools', config => \my $cfg );
-  Log::Any::Adapter->set({ category => qr/^Baz/ },      'Daemontools', config => \my $cfg2 );
+  # As many config objects as you need
+  my $cfg= Log::Any::Adapter::Daemontools->new_config;
+  my $cfg2= Log::Any::Adapter::daemontools->new_config;
   
-  # Change log level independently
+  # Assign them to logging categories
+  Log::Any::Adapter->set({ category => qr/^Foo::Bar/ }, 'Daemontools', config => $cfg );
+  Log::Any::Adapter->set({ category => qr/^Baz/ },      'Daemontools', config => $cfg2 );
+  
+  # Update them later and existing adapters use the new settings
   $cfg->log_level('info');
   $cfg2->log_level('debug');
 
@@ -134,6 +139,8 @@ sub log_level {
 	if (@_) {
 		croak "extra arguments" if @_ > 1;
 		my $l= _parse_log_level($_[0], $self->{log_level_num}, $self->{log_level_min_num}, $self->{log_level_max_num});
+
+		# If log level changes, reset the cache
 		if ($l != $self->{log_level_num}) {
 			$self->{log_level_num}= $l;
 			$self->_reset_cached_adapters;
@@ -146,6 +153,8 @@ sub log_level_min {
 	my $self= shift;
 	if (@_) {
 		croak "extra arguments" if @_ > 1;
+		
+		# If log level changes as a result, reset the cache
 		$self->{log_level_min_num}= _parse_log_level($_[0], $self->{log_level_min_num}, EMERGENCY-1, $self->{log_level_max_num});
 		if ($self->{log_level_min_num} > $self->{log_level_num}) {
 			$self->{log_level_num}= $self->{log_level_min_num};
@@ -160,6 +169,8 @@ sub log_level_max {
 	if (@_) {
 		croak "extra arguments" if @_ > 1;
 		$self->{log_level_max_num}= _parse_log_level($_[0], $self->{log_level_max_num}, $self->{log_level_min_num}, TRACE);
+		
+		# If log level changes as a result, reset the cache
 		if ($self->{log_level_max_num} < $self->{log_level_num}) {
 			$self->{log_level_num}= $self->{log_level_max_num};
 			$self->_reset_cached_adapters;
