@@ -105,6 +105,7 @@ BEGIN {
 		info => INFO,
 		debug => DEBUG,
 		trace => TRACE,
+		all => TRACE
 	);
 	%log_level_name= reverse %log_level_num;
 	
@@ -117,9 +118,9 @@ BEGIN {
 
 sub _parse_log_level {
 	my ($spec, $base, $min, $max)= @_;
-	my $lev= $spec =~ /^-?\d+$/?         $spec
-		: $spec =~ /^([-+])= (-?\d+)$/?  $base + "${1}1" * $2
-		: $log_level_num{$spec};
+	my $lev= $spec =~ /^-?\d+$/? $spec  # plain level
+		: $spec =~ /^([-+])= (-?\d+)$/? $base + "${1}1" * $2 # += notation
+		: $log_level_num{$spec}; # else a level name
 	defined $lev or croak "Invalid log level '$spec'";
 	$min= EMERGENCY-1 unless defined $min;
 	$lev= $min unless $lev >= $min;
@@ -802,7 +803,7 @@ sub _build_writer_code {
 	return $code;
 }
 
-# "Cached Adapters" would more properly be a field of the config object, but then
+# "Cached Adapters" is conceptually a field of the config object, but then
 # it shows a giant mess if/when you Dump() the object, so I'm using this trick
 # to keep the list attached to the package instead of the object.
 # Object destructor cleans up the list.
