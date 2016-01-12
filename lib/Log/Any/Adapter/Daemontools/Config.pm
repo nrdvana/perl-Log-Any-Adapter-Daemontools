@@ -75,7 +75,8 @@ or a number, or C<"+= N"> syntax.  (but use L</log_level_adjust> for that)
 Returns the level name.
 
 Accepts any of the names and aliases defined in L<Log::Adapter::Any::Util>
-but also the string C<'none'> (and value -1) to completely stop all logging.
+but also the string C<'none'> (and value -1) to completely stop all logging,
+or the string C<all> (alias for trace) to enable all logging.
 
 =head2 log_level_min
 
@@ -85,7 +86,7 @@ but also the string C<'none'> (and value -1) to completely stop all logging.
 
 Get or set the minimum allowed log level.
 Log levels below the minimum are silently clamped.
-Can be assigned either a name or number, or "+= N" syntax.
+Can be assigned either a name or number, or C<"+= N"> syntax.
 Returns the level name.
 
 =head2 log_level_max
@@ -224,39 +225,39 @@ The following variables and functions are available for your string of code:
 
 =over
 
-=item $_
+=item C<$_>
 
 The line of message text
 
-=item $category
+=item C<$category>
 
 The name of the Log::Any category the message came from
 
-=item $level
+=item C<$level>
 
 The name of the log level
 
-=item $level_prefix
+=item C<$level_prefix>
 
 The default prefix behavior (C<"$level: "> for all levels except info, which is an empty string)
 
-=item numeric_level(...)
+=item C<numeric_level(...)>
 
 The utility method from L<Log::Any::Adapter::Util>, useful for comparing levels.
 
-=item $file
+=item C<$file>
 
 The full filename from C<caller()>
 
-=item $file_brief
+=item C<$file_brief>
 
 The filename from C<caller()> minus the library path (best guess, no guarantees)
 
-=item $line
+=item C<$line>
 
 The line number from C<caller()>
 
-=item $package
+=item C<$package>
 
 The package name from C<caller()>
 
@@ -362,14 +363,14 @@ this object.
 The primary purpose is to provide convenient initialization of the global
 logging configuration.
 
-DO NOT pass un-sanitized user input to init(), because the 'format' attribute
+B<DO NOT> pass un-sanitized user input to C<init>, because the C<format> attribute
 is processed as perl code.
 
 The following are provided:
 
 =over
 
-=item env, or process_env
+=item C<env>, or C<process_env>
 
   env => $name_or_args
 
@@ -382,13 +383,13 @@ Profiles:
 
 =over
 
-=item 1
+=item C<1>
 
   { debug => 'DEBUG' }
 
 =back
 
-=item argv, or process_argv
+=item C<argv>, or C<process_argv>
 
   argv => $name_or_args
 
@@ -401,9 +402,9 @@ Profiles:
 
 =over
 
-=item 1
+=item C<1>
 
-=item "gnu"
+=item C<'gnu'>
 
   {
     bundle  => 1,
@@ -414,7 +415,7 @@ Profiles:
 
 =back
 
-=item signals, handle_signals, or install_signal_handlers
+=item C<signals>, C<handle_signals>, or C<install_signal_handlers>
 
   signals => [ $v, $q ],
   signals => { verbose => $v, quiet => $q },
@@ -447,6 +448,8 @@ Sets L</output>
 =item writer
 
 Sets L</writer>
+
+=back
 
 =cut
 
@@ -522,17 +525,17 @@ sub init {
 =head2 log_level_num
 
 The current log level, returned as a number.  This is B<NOT> a writeable attribute, just
-a shortcut for C<< numeric_level( $self->log_level ) >>.
+a shortcut for C<< numeric_level( $config->log_level ) >>.
 
 =head2 log_level_min_num
 
 The current minimum, returned as a number.  This is B<NOT> a writeable attribute, just
-a shortcut for C<< numeric_level( $self->log_level_min ) >>.
+a shortcut for C<< numeric_level( $config->log_level_min ) >>.
 
 =head2 log_level_max_num
 
 The current maximum, returned as a number.  This is B<NOT> a writeable attribute, just
-a shortcut for C<< numeric_level( $self->log_level_max ) >>.
+a shortcut for C<< numeric_level( $config->log_level_max ) >>.
 
 =cut
 
@@ -602,7 +605,7 @@ sub debug_level_to_log_level {
 
   $self->process_argv( bundle => ..., verbose => ..., quiet => ..., stop => ..., remove => ... )
 
-Scans (and optionally modifies) @ARGV using method L<parse_log_level_opts>,
+Scans (and optionally modifies) C<@ARGV> using method L</parse_log_level_opts>,
 with the supplied options, and updates the log level accordingly.
 
 =cut
@@ -720,18 +723,18 @@ sub parse_log_level_opts {
 
 =head2 install_signal_handlers
 
-  $config->handle_signals( verbose => $signal_name, quiet => $signal_name );
+  $config->handle_signals( verbose => $verbose_sig, quiet => $quiet_sig );
 
-Install signal handlers (probably USR1, USR2) which increase or decrease
+Install signal handlers (probably C<USR1>, C<USR2>) which increase or decrease
 the log level.
 
 Basically:
 
-  $SIG{ $verbose_name }= sub { $config->log_level_adjust(1); }
-    if $verbose_name;
+  $SIG{ $verbose_sig }= sub { $config->log_level_adjust(1); }
+    if $verbose_sig;
   
-  $SIG{ $quiet_name   }= sub { $config->log_level_adjust(-1); }
-    if $quiet_name;
+  $SIG{ $quiet_sig   }= sub { $config->log_level_adjust(-1); }
+    if $quiet_sig;
 
 =cut
 
@@ -751,8 +754,8 @@ sub install_signal_handlers {
 
 =head2 compiled_writer
 
-This returns the L<writer> attribute if it is defined, or the compiled
-result of L<output> and L<format> otherwise.
+This returns the L</writer> attribute if it is defined, or the compiled
+result of L</output> and L</format> otherwise.
 
 =cut
 
