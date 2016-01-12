@@ -18,6 +18,6 @@ $log->is_debug; # force any lazy-loading
 close STDERR;
 open STDERR, '>&', \*OLD_STDERR or die "Can't restore stderr";
 
-like( $buf, qr/Invalid arguments: typo at \Q$src_file\E line $src_line./, 'carp error on correct file/line' );
+like( $buf, qr/Invalid arguments: typo at \Q$src_file\E line $src_line/, 'carp error on correct file/line' );
 
 done_testing;
