@@ -1,6 +1,6 @@
 #! /usr/bin/perl
 
-use Test::More;
+use Test::More (($^O =~ /Win/)? ( skip_all => "User signals not supported on Windows" ) : () );
 use Log::Any '$log';
 use Log::Any::Adapter 'Daemontools', -init => { signals => [ 'USR1', 'USR2' ] };
 
