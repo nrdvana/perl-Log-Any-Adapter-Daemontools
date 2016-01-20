@@ -1,4 +1,4 @@
-Version 0.100
+Version 0.100002
  - dumper is no longer supported due to Log::Any
  - filter is deprecated in favor of log_level
  - New shared Config allows changing log level on the fly without
