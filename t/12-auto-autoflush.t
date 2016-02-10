@@ -10,7 +10,7 @@ is( $out, "stdout\nstderr\n", 'default stdout gets autoflush' );
 $out= _run(q/ use IO::File; use Log::Any q{$log}; use Log::Any::Adapter q{Daemontools}, -init => { output => \*STDOUT }; $log->info(q{stdout}); print STDERR qq{stderr\n} /);
 is( $out, "stdout\nstderr\n", 'default stdout gets autoflush when IO::File loaded' );
 
-$out= _run(q/ use IO::File; use Log::Any q{$log}; use Log::Any::Adapter q{Daemontools}, -init => { output => IO::File->new_from_fd(1,q{w}) }; $log->info(q{stdout}); print STDERR qq{stderr\n} /);
+$out= _run(q/ use IO::File; use Log::Any q{$log}; use Log::Any::Adapter q{Daemontools}, -init => { output => IO::File->new->fdopen(\*STDOUT, q{w}) }; $log->info(q{stdout}); print STDERR qq{stderr\n} /);
 is( $out, "stdout\nstderr\n", 'autoflush IO::File' );
 
 $out= _run(q/ use Log::Any q{$log}; use Log::Any::Adapter q{Daemontools}, -init => { output => sub { print @_ } }; $log->info(q{stdout}); print STDERR qq{stderr\n} /);
