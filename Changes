@@ -1,3 +1,6 @@
+Version 0.100003
+ - Enable autoflush on output handles
+
 Version 0.100002
  - dumper is no longer supported due to Log::Any
  - filter is deprecated in favor of log_level
