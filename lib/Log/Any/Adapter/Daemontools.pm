@@ -7,7 +7,7 @@ use Log::Any::Adapter::Util 'numeric_level';
 use Log::Any 1.03;
 use Log::Any::Adapter::Daemontools::Config;
 
-our $VERSION= '0.100002';
+our $VERSION= '0.100003';
 
 # ABSTRACT: Logging adapter suitable for use in a Daemontools-style logging chain
 
@@ -114,6 +114,13 @@ And of course, you often want to see additional details about the message or
 perform some of your own tweaks.  This module provides a C<format> option to
 easily add C<caller> info and/or C<category> where the message originated,
 and allows full customization with coderefs.
+
+=item Enable autoflush on output handle
+
+I often forget to C< $|= 1 >, and then wonder why my log messages don't match
+what the program is currently doing.  This module turns on autoflush if
+'output' is a file handle.  (but if output is a coderef or other object, it's
+still up to you)
 
 =back
 

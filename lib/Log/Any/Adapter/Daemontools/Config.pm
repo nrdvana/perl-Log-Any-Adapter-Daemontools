@@ -755,7 +755,8 @@ sub install_signal_handlers {
 =head2 compiled_writer
 
 This returns the L</writer> attribute if it is defined, or the compiled
-result of L</output> and L</format> otherwise.
+result of L</output> and L</format> otherwise.  If it builds a writer from
+L</output>, it will also enable autoflush on that file handle.
 
 =cut
 
@@ -765,12 +766,14 @@ sub compiled_writer {
 }
 
 # This method combines the output and format settings into a writer.
+# It also ensures the output is using autoflush
 sub _build_writer_cache {
 	my $self= shift;
 	my $code= "sub {  \n" . $self->_build_writer_code . "\n}";
 	my $err;
 	my $writer= $self->_build_writer_eval_in_clean_scope( $code, \$err )
 		or croak "Compilation of log writer failed: $err\nSource code is: $code";
+	$self->_enable_autoflush($self->output);
 	return $writer;
 }
 
@@ -815,6 +818,25 @@ sub _build_writer_code {
 	}
 
 	return $code;
+}
+
+sub _enable_autoflush {
+	my ($self, $thing)= @_;
+	# This module tries to be very backward-compatible, and not force people to use IO::Handle
+	# if they didn't intend to...
+	if (ref $thing eq 'GLOB') {
+		my $prev= select($thing);
+		$|= 1;
+		select($prev);
+		1;
+	}
+	elsif (ref($thing)->can('autoflush')) {
+		$thing->autoflush(1);
+		1;
+	}
+	else {
+		0;
+	}
 }
 
 # "Cached Adapters" is conceptually a field of the config object, but then
