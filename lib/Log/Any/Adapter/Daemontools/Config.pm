@@ -3,6 +3,7 @@ use strict;
 use warnings;
 
 # ABSTRACT: Dynamic configuration settings used by Daemontools logging adapters
+# VERSION
 
 =head1 DESCRIPTION
 
