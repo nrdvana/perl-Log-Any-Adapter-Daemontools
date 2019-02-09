@@ -102,8 +102,10 @@ configuration in many ways without having to re-attach the adapters.
 =item C<--verbose> / C<--quiet> / C<$ENV{DEBUG}>
 
 My scripts usually end up with a chunk of boilerplate in the option processing
-to raise or lower the log level.  This module provides an option to get you
-common UNIX behavior in as little as 7 characters :-)
+to raise or lower the log level.  This module replaces that with a simple
+
+  -init => { argv => 'consume', env => 1 };
+
 It's flexible enough to give you many other common varieties, or you can ignore
 it because it isn't enabled by default.
 
@@ -118,7 +120,7 @@ and allows full customization with coderefs.
 
 I often forget to C< $|= 1 >, and then wonder why my log messages don't match
 what the program is currently doing.  This module turns on autoflush if
-'output' is a file handle.  (but if output is a coderef or other object, it's
+C<output> is a file handle.  (but if output is a coderef or other object, it's
 still up to you)
 
 =back
@@ -192,7 +194,7 @@ Not actually an attribute!  If you pass this to the Daemontools adapter,
 the first time an instance of the Adapter is created it will call ->init on
 the adapter's configuration.  This allows you to squeeze things onto one line.
 
-The more proper way to write the above example is:
+The more verbose way to write the above example is:
 
   use Log::Any::Adapter 'Daemontools';
   Log::Any::Adapter::Daemontools->global_config->init( ... );
